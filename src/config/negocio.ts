@@ -20,6 +20,8 @@ export const VARIACION_RELEVANTE = 0.1
 /** Diferencia tolerada entre los totales del Excel y los recalculados (0,5 %). */
 export const TOLERANCIA_TOTALES = 0.005
 
+
+
 /* ---------------- Hojas tipo matriz (Informe comercial) ---------------- */
 
 /** Expresiones para clasificar las cabeceras de métricas. */
@@ -27,7 +29,8 @@ export const METRICAS = {
   meta: /^(meta|presupuesto|objetivo|ppto)\b/i,
   ratio: /(cumplimiento|participacion|porcentaje|^%$|%)/i,
   derivada: /(comparativo|diferencia|variacion|desviacion)/i,
-  /** Métrica principal preferida (en orden) */
+  /** Encabezados de tablas dinámicas de Excel ("Suma de cant", "Cuenta de...") */
+  agregada: /^(suma de|cuenta de|promedio de|max de|min de)\b/i,
   principal: [/total ventas/i, /total mo/i, /^total/i, /ventas/i, /acumulado/i],
 }
 
@@ -45,11 +48,10 @@ export const COLUMNAS_DINERO =
   /(venta|valor|total|utilidad|costo|precio|neto|subtotal|descuento|iva|ingreso|margen)/i
 
 /** Prioridad de medida por defecto. */
-export const PRIORIDAD_MEDIDA = [/^ventas$/i, /valor_subtotal/i, /^total neto$/i, /valor_total/i, /^total$/i, /valor/i, /utilidad/i]
-
+export const PRIORIDAD_MEDIDA = [/^ventas$/i,/^precio\+iva$/i,/precio.?iva/i,/valor_subtotal/i,/^total neto$/i,/valor_total/i,/^total$/i,/valor/i,/utilidad/i,]
 /** Prioridad de dimensión por defecto. */
-export const PRIORIDAD_DIMENSION = [/bodega|agencia|sede|sucursal/i, /^marca$/i, /^grupo$/i, /vendedor|asesor/i, /motivo|tipo|estado/i]
-
+export const PRIORIDAD_DIMENSION = [/bodega|agencia|sede|sucursal/i,/^marca$/i,/^(sub)?grupo$/i,/vendedor|asesor/i,/motivo|tipo|estado/i,
+]
 /** Prioridad de columna de fecha. */
 export const PRIORIDAD_FECHA = [/fecha_factura/i, /fecha.*fact/i, /^fecha$/i, /fecha/i]
 
@@ -78,14 +80,14 @@ export const DIMENSION_MARCA_DERIVADA = 'Marca (por código de bodega)'
  * Hojas que NO se procesan (muy grandes y sin valor para el dashboard comercial).
  * Se listan en la revisión como "omitidas". Ej: TERCEROS 2026 (≈180.000 filas con NIT).
  */
-export const HOJAS_NO_PROCESAR = /^terceros\b/i
+export const HOJAS_NO_PROCESAR = /^(terceros|pagar[eé]s pendientes)\b/i
 
 /**
  * Hojas que se procesan pero quedan DESMARCADAS por defecto en la revisión de hojas:
  * estados financieros, contabilidad, datos de socios o terceros. Puedes marcarlas manualmente.
  */
 export const HOJAS_CONFIDENCIALES =
-  /(terceros|socio|reparto|mayor|pcga|balance|revelaciones|estado de|flujo|patri|paraflujo|indice|revisoria|requerimiento|gasto|presupuesto|fiscal|rentabilidad|analisis ingresos|caratula|^hoja\d*$)/i
+  /(terceros|socio|reparto|mayor|pcga|balance|revelaciones|estado de|flujo|patri|paraflujo|indice|revisoria|requerimiento|gasto|presupuesto|fiscal|rentabilidad|analisis ingresos|caratula|^hoja\d*$|anulacion)/i
 
 /* ---------------- Marcas y colores (paleta del reporte de gerencia) ---------------- */
 

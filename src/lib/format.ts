@@ -83,29 +83,44 @@ export function titleCase(s: string): string {
  */
 export function shortLabel(raw: string): string {
   const s = String(raw ?? '').replace(/\s+/g, ' ').trim()
+
   const m = s.match(/^(\d{2,4})\b.*?\b(REPUESTOS|TALLER)\b\s*(.*)$/i)
   if (m) {
     const rest = m[3].trim()
-    return `${m[1]} ${rest ? titleCase(rest) : titleCase(m[2])}`
+    return rest ? titleCase(rest) : titleCase(m[2])
   }
-  // "116 - CL 6 28 61 SUZUKI CALI" → "116 Suzuki Cali" (se quita la dirección)
+
   const addr = s.match(/^(\d{2,4})\s*-?\s+((?:CL|CR|CRA|KR|CALLE|CARRERA|AV|AVENIDA|DG|TV|TR)\.?\s?\d.*)$/i)
   if (addr) {
     const tokens = addr[2].split(' ')
     let k = 0
-    while (k < tokens.length && (/^(CL|CR|CRA|KR|CALLE|CARRERA|AV|AVENIDA|DG|TV|TR|LC|LOCAL|NO|N°|#)\.?$/i.test(tokens[k]) || /\d/.test(tokens[k]) || tokens[k].length <= 1)) k++
+    while (
+      k < tokens.length &&
+      (/^(CL|CR|CRA|KR|CALLE|CARRERA|AV|AVENIDA|DG|TV|TR|LC|LOCAL|NO|N°|#)\.?$/i.test(tokens[k]) ||
+        /\d/.test(tokens[k]) ||
+        tokens[k].length <= 1)
+    )
+      k++
     const name = tokens.slice(k).join(' ')
     if (name) {
-      const out = `${addr[1]} ${titleCase(name)}`
+      const out = titleCase(name)
       return out.length > 26 ? `${out.slice(0, 25)}…` : out
     }
   }
-  // "101 - ALMACEN PRINCIPAL PALMIRA" → "101 Almacen Principal Palmira" (recortado)
-  const c = s.match(/^(\d{1,5})\s*-\s*(.+)$/)
+
+  const c = s.match(/^\d{1,5}\s*-\s*(.+)$/)
   if (c) {
-    const out = `${c[1]} ${titleCase(c[2])}`
+    const out = titleCase(c[1])
     return out.length > 26 ? `${out.slice(0, 25)}…` : out
   }
+
+  // "407 HERO FLORIDA CALLE 9 18 82" → "Hero Florida Calle 9 18 82"
+  const c2 = s.match(/^\d{1,5}\s+(.+)$/)
+  if (c2) {
+    const out = titleCase(c2[1])
+    return out.length > 26 ? `${out.slice(0, 25)}…` : out
+  }
+
   return s.length > 26 ? `${s.slice(0, 25)}…` : s
 }
 

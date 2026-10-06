@@ -5,7 +5,7 @@
  *   onboarding → upload → processing → dashboard
  */
 import { create } from 'zustand'
-import type { ParsedWorkbook, Report, UploadMode } from '@/types/report'
+import type { ParsedWorkbook, PeriodFilter, Report, UploadMode } from '@/types/report'
 import { parseFile, validateFile } from '@/parser'
 import { buildReports } from '@/analysis/compare'
 import { HOJAS_CONFIDENCIALES } from '@/config/negocio'
@@ -53,6 +53,13 @@ interface AppState {
   selected: string[]
   /** true si se pasó por la revisión de hojas (permite volver a ella desde el dashboard) */
   reviewed: boolean
+    /** Filtro de período aplicado al reporte activo. null = usar el default natural. */
+  periodFilter: PeriodFilter | null
+  /**
+   * Si es true, `periodFilter` se mantiene al cambiar de hoja (si la nueva hoja
+   * tiene períodos compatibles). Si es false, se resetea a null al cambiar.
+   */
+  periodFilterPinned: boolean
 
   chooseMode: (m: UploadMode) => void
   setFile: (i: number, f: File | null) => void
@@ -66,6 +73,8 @@ interface AppState {
   setSelected: (ids: string[]) => void
   confirmSelection: () => void
   openReview: () => void
+  setPeriodFilter: (f: PeriodFilter | null) => void
+  setPeriodFilterPinned: (pinned: boolean) => void
 }
 
 const initial = {
@@ -82,6 +91,8 @@ const initial = {
   isSample: false,
   selected: [] as string[],
   reviewed: false,
+  periodFilter: null,
+  periodFilterPinned: false
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -111,7 +122,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   backToOnboarding: () => set({ ...initial }),
   reset: () => set({ ...initial }),
   setActive: (activeId) => {
-    set({ activeId })
+    const { periodFilterPinned, activeId: prevActive } = get()
+    // Si el filtro está fijado y seguimos en el mismo tipo de reporte, lo mantenemos.
+    // Si no, lo reseteamos al default natural de la nueva hoja.
+    const keep = periodFilterPinned && activeId !== prevActive
+    set({
+      activeId,
+      ...(keep ? {} : { periodFilter: null }),
+    })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   },
 
@@ -159,7 +177,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   openReview: () => set({ step: 'review' }),
+  setPeriodFilter: (periodFilter) => set({ periodFilter }),
 
+  setPeriodFilterPinned: (periodFilterPinned) => set({ periodFilterPinned }),
   /** Carga los datos de src/data/ejemplo.ts (útil para probar sin archivos). */
   loadSample: async () => {
     set({ step: 'processing', mode: 'single', progress: [{ doc: 0, step: 'Cargando ejemplo', pct: 40 }], error: null })

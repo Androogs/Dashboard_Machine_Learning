@@ -252,3 +252,40 @@ export interface Insight {
 }
 
 export type UploadMode = 'single' | 'compare'
+
+/* ------------------------------------------------------------------ */
+/* Filtro de período (control global del dashboard)                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Cómo se compara el rango actual contra otro:
+ * - none:   sin comparación.
+ * - year:   año anterior, mismo rango.
+ * - month:  mes anterior, mismo tamaño de rango.
+ * - custom: rango personalizado definido por el usuario.
+ */
+export type CompareMode = 'none' | 'year' | 'month' | 'custom'
+
+/**
+ * Modo de filtro, derivado de from/to:
+ * - mes:     from === to, ambos "YYYY-MM".
+ * - acum:    from === "YYYY-01", to === "YYYY-MM" (mismo año).
+ * - periodo: from === to, ambos "YYYY" (año completo).
+ * - rango:   cualquier otra combinación.
+ */
+export type FilterMode = 'mes' | 'acum' | 'periodo' | 'rango'
+
+/**
+ * Filtro de período aplicado a un reporte.
+ *
+ * - `from` y `to` son claves del tipo que usa `Period.key`:
+ *   "YYYY-MM" (mensual) o "YYYY" (anual).
+ * - `customFrom` y `customTo` solo se usan cuando `compare === 'custom'`.
+ */
+export interface PeriodFilter {
+  from: string
+  to: string
+  compare: CompareMode
+  customFrom?: string
+  customTo?: string
+}
