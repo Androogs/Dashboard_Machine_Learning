@@ -79,6 +79,7 @@ export interface EnvModel {
   groups: EnvGroup[]
   total: EnvGroup
   hasTarget: boolean
+  targetLabel: string
 }
 
 /* ------------------------------------------------------------------ */
@@ -237,6 +238,7 @@ export function buildEnv(s: MatrixSheet, cfg: EnvConfig): EnvModel {
     groups,
     total: agg('Total', rows, '#378ADD'),
     hasTarget: rows.some((r) => r.target != null),
+    targetLabel: targetMetric?.label ?? 'Meta',
   }
 }
 

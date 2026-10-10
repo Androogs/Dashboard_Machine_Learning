@@ -12,6 +12,7 @@ import { HOJAS_CONFIDENCIALES } from '@/config/negocio'
 
 export type Step = 'onboarding' | 'upload' | 'processing' | 'review' | 'dashboard'
 
+
 /** Selección por defecto: hojas con datos que no son contables/confidenciales. */
 export function defaultSelection(workbooks: ParsedWorkbook[]): string[] {
   // Los documentos adicionales (ej: RUNT) y las hojas RUNT siempre quedan incluidos
@@ -152,6 +153,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         const wb = await parseFile(file, doc, (step, pct) => set((s) => ({ progress: s.progress.map((p) => (p.doc === doc ? { ...p, step, pct } : p)) })))
         workbooks.push(wb)
       }
+
       if (!workbooks.some((w) => w.sheets.some((s) => s.kind !== 'empty'))) {
         throw new Error('No se encontraron hojas estructuradas. Revisa que el archivo tenga una fila de cabeceras con datos debajo.')
       }

@@ -30,11 +30,16 @@ export function groupBySheet(reports: Report[]): SheetEntry[] {
     let entry = out.find((e) => e.id === key)
     if (!entry) {
       const raw = s.sheetName ?? s.name
-      const title = s.kind === 'runt' ? s.title : isGeneric(raw) ? r.title : raw
+      const title = s.kind === 'runt' || s.kind === 'pivot' ? s.title : isGeneric(raw) ? r.title : raw
       entry = { id: key, title, docIndex: s.docIndex, fileName: s.fileName, tables: [] }
       out.push(entry)
     }
-    const label = s.kind === 'matrix' ? s.tableLabel ?? s.dimensionLabel : s.kind === 'flat' ? s.tableLabel ?? 'Registros' : 'Mercado'
+    const label =
+      s.kind === 'matrix' || s.kind === 'pivot'
+        ? s.tableLabel ?? s.dimensionLabel
+        : s.kind === 'flat'
+          ? s.tableLabel ?? 'Registros'
+          : 'Mercado'
     entry.tables.push({ id: r.id, label: `Por ${label.toLowerCase()}`, report: r })
   }
   return out.sort((a, b) => a.docIndex - b.docIndex)

@@ -142,6 +142,28 @@ function detectHeader(rows: Cell[][], r: number, width: number, yearHint: number
     return finish(rows, r, r + 1, specs, width, false, 0, fixes)
   }
 
+  /* ---------- Fechas arriba, métricas debajo (ej: desembolsos) ---------- */
+  const pairedDateCols: number[] = []
+  for (let c = 0; c < width; c++) {
+    const value = row[c]
+    if (isExcelDate(value) && value.y >= 1990) pairedDateCols.push(c)
+  }
+  if (pairedDateCols.length >= 2) {
+    const specs: ColSpec[] = []
+    let period: Period | null = null
+    for (let c = pairedDateCols[0]; c < width; c++) {
+      const value = row[c]
+      if (isExcelDate(value) && value.y >= 1990) period = monthly(value.y, value.m)
+      const metric = next[c]
+      if (!period || !isText(metric)) continue
+      const role = classifyText(metric)
+      if (role === 'value' || role === 'target') specs.push({ index: c, metric: metric.trim(), role, period })
+    }
+    if (specs.length >= 2 && hasNumbersBelow(rows, r + 2, specs.map((spec) => spec.index))) {
+      return finish(rows, r, r + 1, specs, width, false, 0, [])
+    }
+  }
+
   /* ---------- Estilo C: una fila con fechas, meses o años ---------- */
   const dateCols: number[] = []
   let badDates = 0
@@ -158,7 +180,11 @@ function detectHeader(rows: Cell[][], r: number, width: number, yearHint: number
   const periodCols = [...new Set([...dateCols, ...monthCols, ...(numericNonYear ? [] : yearCols)])].sort((a, b) => a - b)
   if (periodCols.length < 2) return null
   const first = periodCols[0]
-  const filledAfter = row.slice(first).filter((v) => v !== null).length
+  const filledAfter = row.slice(first).filter((v) => {
+    if (v === null) return false
+    if (!isText(v)) return true
+    return !isDerivedHeaderText(v)
+  }).length
   if (periodCols.length < filledAfter * 0.5) return null
   if (!row.slice(0, first).some(isText) && !hasLabelsBelow(rows, r + 1, first)) return null
   if (!hasNumbersBelow(rows, r + 1, periodCols)) return null
@@ -172,6 +198,7 @@ function detectHeader(rows: Cell[][], r: number, width: number, yearHint: number
       if (v.y >= 1990) specs.push({ index: c, metric: '', role: 'value', period: monthly(v.y, v.m) })
       continue
     }
+
     const y = numericNonYear ? null : yearOf(v)
     if (y !== null) {
       specs.push({ index: c, metric: '', role: 'value', period: annual(y) })
@@ -191,6 +218,11 @@ function detectHeader(rows: Cell[][], r: number, width: number, yearHint: number
     }
   }
   return finish(rows, r, r, specs, width, inferred, badDates, [])
+}
+
+function isDerivedHeaderText(value: string): boolean {
+  const role = classifyText(value)
+  return role === 'ratio' || role === 'derived' || role === 'total' || /^acumulad[oa]\b/i.test(norm(value))
 }
 
 /**
@@ -291,6 +323,7 @@ function rowLabel(row: Cell[], labelCols: number[]): string {
 function readBlocks(raw: RawSheet, yearHint: number): Block[] {
   const { rows, width } = raw
   const blocks: Block[] = []
+  const stopAfterTotal = /^(comparativo mes a mes|acumulado 2025[- ]2026|desembolso financieras)$/.test(norm(raw.name))
   let r = 0
   let prevEnd = -1
   while (r < rows.length) {
@@ -327,6 +360,11 @@ function readBlocks(raw: RawSheet, yearHint: number): Block[] {
       lastData = rr
       if (!label) continue
       out.push({ label, kind: TOTAL_RE.test(label) ? 'total' : 'item', partial: false, values })
+      if (stopAfterTotal && TOTAL_RE.test(label)) {
+        lastData = rr
+        rr++
+        break
+      }
     }
     // Filas después del último total = desglose informativo (ej: "Gerencia", "COMERCIAL" bajo el TOTAL)
     const lastTotal = out.map((x) => x.kind).lastIndexOf('total')
@@ -462,10 +500,16 @@ export function parseBlocks(raw: RawSheet, ctx: { id: string; docIndex: number; 
   const blocks = readBlocks(raw, yearHint)
   if (!blocks.length) return []
 
+  const normalizedSheetName = norm(raw.name)
+  // En estas hojas, las filas TOTAL no delimitan marcas sino que totalizan categorías.
+  const allowTotalSegmentation = !/^(comparativo mes a mes|acumulado 2025[- ]2026|desembolso financieras)$/.test(normalizedSheetName)
+  // En desembolsos, cada título identifica una tabla distinta (participación vs. desembolsos).
+  const keepSectionsSeparate = normalizedSheetName === 'desembolso financieras'
+
   // Agrupar bloques por dimensión (SEDE, ASESOR, MODELO, …)
   const byDim = new Map<string, Block[]>()
   for (const b of blocks) {
-    const k = norm(b.header.dimLabel)
+    const k = keepSectionsSeparate ? `${norm(b.header.dimLabel)}|${norm(b.title)}` : norm(b.header.dimLabel)
     byDim.set(k, [...(byDim.get(k) ?? []), b])
   }
 
@@ -484,7 +528,7 @@ export function parseBlocks(raw: RawSheet, ctx: { id: string; docIndex: number; 
       }
     let groupMode = list.length >= 2 && sameSig && (pairs ? overlap / pairs : 0) < 0.3
     // Una sola tabla cuyas marcas solo se separan con filas TOTAL (ej: MOTOS COMPARATIVO)
-    const seg = list.length === 1 ? segmentByTotals(list[0]) : null
+    const seg = list.length === 1 && allowTotalSegmentation ? segmentByTotals(list[0]) : null
 
     // Columnas unificadas (solo valores y metas: diferencias y % se recalculan)
     const keyed = new Map<string, ColSpec>()

@@ -21,7 +21,10 @@ import { COLOR_COMPARACION } from '@/config/negocio'
 const MES_COLOR = '#9B59B6'
 
 export function EnvReport({ sheet, title }: { sheet: MatrixSheet; title: string }) {
-  const [cfg, setCfg] = useState<EnvConfig>(() => defaultEnvConfig(sheet))
+  const [cfg, setCfg] = useState<EnvConfig>(() => {
+    const config = defaultEnvConfig(sheet)
+    return sheet.presentation === 'budget-summary' ? { ...config, mode: 'acum' } : config
+  })
   const [view, setView] = useState('general')
   const env = useMemo(() => buildEnv(sheet, cfg), [sheet, cfg])
   const fmt = valueFormat(env.unit)
@@ -38,8 +41,10 @@ export function EnvReport({ sheet, title }: { sheet: MatrixSheet; title: string 
     return out
   }, [sheet])
 
+  const docBadge = sheet.docIndex >= 2 ? { id: 'doc-extra', label: 'Documento adicional' } : null
   const pills = [
     { id: 'general', label: 'Vista general' },
+    ...(docBadge ? [docBadge] : []),
     ...env.groups.map((g) => ({ id: `g:${g.name}`, label: g.name })),
     ...(env.last ? [{ id: 'mes', label: `${env.last.prevLabel.split(' ')[0]} vs ${env.last.curLabel}`, accent: MES_COLOR }] : []),
   ]
@@ -47,11 +52,13 @@ export function EnvReport({ sheet, title }: { sheet: MatrixSheet; title: string 
   const group = activeView.startsWith('g:') ? env.groups.find((g) => `g:${g.name}` === activeView) ?? null : null
 
   const bandTitle =
-    activeView === 'mes'
-      ? `Comparativo ${env.last!.prevLabel} vs ${env.last!.curLabel}`
-      : group
-        ? `${title} — ${group.name}`
-        : `${title}${env.groups.length ? ' — Todas las marcas' : ''}`
+    activeView === 'doc-extra'
+      ? `${title} — Documento adicional`
+      : activeView === 'mes'
+        ? `Comparativo ${env.last!.prevLabel} vs ${env.last!.curLabel}`
+        : group
+          ? `${title} — ${group.name}`
+          : `${title}${env.groups.length ? ' — Todas las marcas' : ''}`
   const bandInfo = activeView === 'mes' ? `Mes actual frente al mes anterior` : env.rangeLabel
   const bandBadge = activeView === 'mes' ? `Mes de ${env.last!.curLabel.toLowerCase()}` : env.badge
 
@@ -61,7 +68,7 @@ export function EnvReport({ sheet, title }: { sheet: MatrixSheet; title: string 
       <ReportBand title={bandTitle} info={bandInfo} badge={bandBadge} />
 
       {/* Controles del periodo */}
-      {(env.cutOptions.length > (env.mode === 'periodo' ? 2 : 1) || env.modes.length > 1 || metrics.length > 1) && activeView !== 'mes' && (
+      {(env.cutOptions.length > (env.mode === 'periodo' ? 2 : 1) || (sheet.presentation !== 'budget-summary' && env.modes.length > 1) || metrics.length > 1) && activeView !== 'mes' && (
         <div className="no-print flex flex-wrap items-end gap-3">
           {metrics.length > 1 && (
             <FilterField
@@ -74,7 +81,7 @@ export function EnvReport({ sheet, title }: { sheet: MatrixSheet; title: string 
           {env.cutOptions.length > (env.mode === 'periodo' ? 2 : 1) && (
             <FilterField label="Corte" value={env.cut.key} onChange={(k) => setCfg((c) => ({ ...c, cutKey: k }))} options={env.cutOptions.map((p) => ({ value: p.key, label: p.label }))} />
           )}
-          {env.modes.length > 1 && (
+          {sheet.presentation !== 'budget-summary' && env.modes.length > 1 && (
             <FilterField
               label="Mostrar"
               value={env.mode}
@@ -85,7 +92,9 @@ export function EnvReport({ sheet, title }: { sheet: MatrixSheet; title: string 
         </div>
       )}
 
-      {activeView === 'mes' ? (
+      {sheet.presentation === 'budget-summary' && activeView === 'general' ? (
+        <BudgetSummaryView sheet={sheet} env={env} fmt={fmt} />
+      ) : activeView === 'mes' ? (
         <MonthView env={env} fmt={fmt} dim={dim} />
       ) : group ? (
         <GroupView env={env} g={group} fmt={fmt} dim={dim} />
@@ -111,6 +120,98 @@ export function EnvReport({ sheet, title }: { sheet: MatrixSheet; title: string 
 
 type F = ReturnType<typeof valueFormat>
 
+function BudgetSummaryView({ sheet, env, fmt }: { sheet: MatrixSheet; env: EnvModel; fmt: F }) {
+  const total = env.total
+  const rows = [...env.rows].sort((a, b) => (b.cur ?? 0) - (a.cur ?? 0))
+  const max = Math.max(...rows.map((row) => row.cur ?? 0), 0)
+  const targetMetric = sheet.metrics.find((metric) => metric.role === 'target')
+  const budgetByMonth = env.monthLabels.map((_, index) => {
+    const periodKey = `${env.cut.year}-${String(index + 1).padStart(2, '0')}`
+    const columnIndex = targetMetric
+      ? sheet.columns.findIndex((column) => column.metricKey === targetMetric.key && column.period?.key === periodKey)
+      : -1
+    if (columnIndex < 0) return null
+    return sheet.rows
+      .filter((row) => row.type === 'item')
+      .reduce((sum, row) => sum + (row.values[columnIndex] ?? 0), 0)
+  })
+  const executionLabel = 'Ejecución'
+  const columns: EnvTableCol<EnvRow>[] = [
+    { key: 'brand', header: 'Marca', render: (row) => <span className="font-medium text-ink">{row.short}</span> },
+    { key: 'budget', header: 'Presupuesto', align: 'right', muted: true, render: (row) => fmt.full(row.target) },
+    { key: 'execution', header: executionLabel, align: 'right', render: (row) => <span className="font-semibold">{fmt.full(row.cur)}</span> },
+    { key: 'compliance', header: 'Cumplimiento', align: 'right', render: (row) => row.target ? fmtPct((row.cur ?? 0) / row.target) : '—' },
+    { key: 'share', header: 'Participación', align: 'right', muted: true, render: (row) => fmtPct(total.cur ? (row.cur ?? 0) / total.cur : 0) },
+    { key: 'trend', header: 'Tendencia', render: (row) => <TrendBar value={row.cur} max={max} /> },
+  ]
+
+  return (
+    <>
+      <KpiRow columns={3}>
+        <KpiStripe tone="blue" label="Presupuesto" value={fmt.compact(total.target)} note={env.rangeLabel} />
+        <KpiStripe tone="green" label={executionLabel} value={fmt.compact(total.cur)} note={env.rangeLabel} />
+        <KpiStripe
+          tone="amber"
+          label="Cumplimiento de presupuesto"
+          value={total.target ? fmtPct(total.cur / total.target) : '—'}
+          note={`Presupuesto ${fmt.compact(total.target)}`}
+        />
+      </KpiRow>
+
+      <EnvCard
+        title={`Presupuesto vs ejecución por marca — ${env.curLabel}`}
+        legend={[
+          { label: 'Presupuesto', color: COLOR_COMPARACION },
+          { label: executionLabel, color: '#378ADD' },
+        ]}
+      >
+        <BarPair
+          labels={rows.map((row) => row.label)}
+          prev={rows.map((row) => row.target)}
+          cur={rows.map((row) => row.cur)}
+          prevLabel="Presupuesto"
+          curLabel={executionLabel}
+          color="#378ADD"
+          format={fmt.compact}
+        />
+      </EnvCard>
+
+      <EnvCard
+        title={`Evolución mensual de presupuesto y ejecución — ${env.cut.year}`}
+        legend={[
+          { label: 'Presupuesto', color: COLOR_COMPARACION },
+          { label: executionLabel, color: '#378ADD' },
+        ]}
+      >
+        <LinePair
+          labels={env.monthLabels}
+          prev={budgetByMonth}
+          cur={total.mCur}
+          prevLabel="Presupuesto"
+          curLabel={executionLabel}
+          color="#378ADD"
+          format={fmt.compact}
+        />
+      </EnvCard>
+
+      <EnvTable
+        rows={rows}
+        cols={columns}
+        rowKey={(row) => row.label}
+        footer={[
+          'Total',
+          fmt.full(total.target),
+          fmt.full(total.cur),
+          total.target ? fmtPct(total.cur / total.target) : '—',
+          '100 %',
+          '',
+        ]}
+        foot={`* Acumulado del presupuesto y la ejecución a ${env.cut.label}. Participación sobre la ejecución total ${fmt.compact(total.cur)}.`}
+      />
+    </>
+  )
+}
+
 /* ================================================================== */
 /* Vista general                                                       */
 /* ================================================================== */
@@ -131,7 +232,7 @@ function GeneralView({ env, fmt, dim }: { env: EnvModel; fmt: F; dim: string }) 
         <KpiStripe tone="blue" label={`Total ${env.curLabel}${accLabel}`} value={fmt.compact(t.cur)} delta={varOf(t.cur, t.prev)} note={env.prevLabel ? `vs ${env.prevLabel}` : ''} />
         <KpiStripe tone="green" label={env.prevLabel ? `Total ${env.prevLabel}${accLabel}` : 'Periodo de comparación'} value={env.prevLabel ? fmt.compact(t.prev) : '—'} note="Base de comparación" />
         {env.hasTarget ? (
-          <KpiStripe tone="amber" label="Cumplimiento de meta" value={t.target ? fmtPct(t.cur / t.target) : '—'} note={`Meta ${fmt.compact(t.target)}`} />
+          <KpiStripe tone="amber" label={`Cumplimiento de ${env.targetLabel.toLowerCase()}`} value={t.target ? fmtPct(t.cur / t.target) : '—'} note={`${env.targetLabel} ${fmt.compact(t.target)}`} />
         ) : leader ? (
           <KpiStripe tone="amber" label={`Marca líder ${env.curLabel}`} value={fmt.compact(leader.cur)} delta={varOf(leader.cur, leader.prev)} note={`${leader.name}`} />
         ) : (
@@ -206,7 +307,7 @@ function GroupView({ env, g, fmt, dim }: { env: EnvModel; g: EnvGroup; fmt: F; d
         <KpiStripe tone="blue" label={`Total ${env.curLabel}${accLabel}`} value={fmt.compact(g.cur)} delta={varOf(g.cur, g.prev)} note={env.prevLabel ? `vs ${env.prevLabel}` : ''} />
         <KpiStripe tone="green" label={env.prevLabel ? `Total ${env.prevLabel}${accLabel}` : 'Periodo de comparación'} value={env.prevLabel ? fmt.compact(g.prev) : '—'} note="Base de comparación" />
         {env.hasTarget ? (
-          <KpiStripe tone="amber" label="Cumplimiento de meta" value={g.target ? fmtPct(g.cur / g.target) : '—'} note={`Meta ${fmt.compact(g.target)}`} />
+          <KpiStripe tone="amber" label={`Cumplimiento de ${env.targetLabel.toLowerCase()}`} value={g.target ? fmtPct(g.cur / g.target) : '—'} note={`${env.targetLabel} ${fmt.compact(g.target)}`} />
         ) : (
           <KpiStripe tone="amber" label={`${singular(dim)} líder ${env.curLabel}`} value={fmt.compact(leader?.cur)} note={leader?.short} />
         )}
@@ -344,7 +445,7 @@ function RowsTable({ env, rows, fmt, dim, showGroup, total }: { env: EnvModel; r
     { key: 'c', header: env.curLabel, align: 'right', render: (r) => <span className="font-semibold">{fmt.full(r.cur)}</span> },
     ...(env.hasTarget
       ? [
-          { key: 'm', header: 'Meta', align: 'right' as const, muted: true, render: (r: EnvRow) => fmt.full(r.target) },
+          { key: 'm', header: env.targetLabel, align: 'right' as const, muted: true, render: (r: EnvRow) => fmt.full(r.target) },
           { key: 'k', header: 'Cumpl.', align: 'right' as const, render: (r: EnvRow) => (r.target ? fmtPct((r.cur ?? 0) / r.target) : '—') },
         ]
       : []),

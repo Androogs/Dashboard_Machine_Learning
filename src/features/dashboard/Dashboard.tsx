@@ -4,7 +4,7 @@
  * Si una hoja tiene varias tablas, se eligen dentro de la hoja.
  */
 import { useMemo, useState } from 'react'
-import { FileSpreadsheet, FlaskConical, ListChecks, Printer, RotateCcw } from 'lucide-react'
+import { FileSpreadsheet, FileText, FlaskConical, ListChecks, RotateCcw } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import type { Report } from '@/types/report'
 import { groupBySheet, type SheetEntry } from '@/analysis/sheets'
@@ -14,13 +14,16 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { EnvReport } from './env/EnvReport'
 import { RuntReport } from './env/RuntReport'
 import { FlatReport } from './FlatReport'
+import { PivotReport } from './PivotReport'
 import { FlatPairReport, MatrixPairReport } from './PairReport'
 import { cn } from '@/lib/utils'
+import { downloadHtmlReport } from '@/lib/htmlReport'
 
 function ReportView({ report, title }: { report: Report; title: string }) {
   if (report.mode === 'single') {
     const s = report.sheet
     if (s.kind === 'runt') return <RuntReport key={report.id} sheet={s} />
+    if (s.kind === 'pivot') return <PivotReport key={report.id} sheet={s} title={title} />
     if (s.kind === 'matrix') return <EnvReport key={report.id} sheet={s} title={title} />
     return <FlatReport key={report.id} sheet={s} title={title} />
   }
@@ -63,9 +66,22 @@ function SheetView({ entry }: { entry: SheetEntry }) {
 
 export function Dashboard() {
   const { reports, activeId, setActive, reset, isSample, reviewed, openReview, mode } = useAppStore()
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [exportMessage, setExportMessage] = useState<string | null>(null)
   const sheets = useMemo(() => groupBySheet(reports), [reports])
   const active = sheets.find((s) => s.id === activeId) ?? sheets[0]
   const docs = [...new Set(sheets.map((s) => s.docIndex))]
+
+  const handleExport = () => {
+    try {
+      downloadHtmlReport(reports, isSample)
+      setExportError(null)
+      setExportMessage('El informe HTML se generó. Revisa las descargas del navegador.')
+    } catch (error) {
+      setExportMessage(null)
+      setExportError(error instanceof Error ? error.message : 'No se pudo generar el informe HTML.')
+    }
+  }
 
   return (
     <div className="min-h-screen">
@@ -78,8 +94,8 @@ export function Dashboard() {
                 <ListChecks /> Elegir hojas
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={() => window.print()} className="hidden sm:inline-flex">
-              <Printer /> Imprimir o guardar PDF
+            <Button variant="outline" size="sm" onClick={handleExport} aria-label="Descargar informe HTML">
+              <FileText /> <span className="hidden sm:inline">Descargar informe HTML</span><span className="sm:hidden">HTML</span>
             </Button>
             <Button variant="default" size="sm" onClick={reset}>
               <RotateCcw /> Nuevo análisis
@@ -87,6 +103,16 @@ export function Dashboard() {
           </div>
         }
       />
+      {exportError && (
+        <p role="alert" className="mx-auto max-w-[1440px] px-4 pt-2 text-sm text-destructive sm:px-5">
+          {exportError}
+        </p>
+      )}
+      {exportMessage && (
+        <p role="status" className="mx-auto max-w-[1440px] px-4 pt-2 text-sm text-muted-foreground sm:px-5">
+          {exportMessage}
+        </p>
+      )}
 
       {/* Navegación móvil: hojas */}
       <nav className="no-print sticky top-14 z-20 border-b bg-background/95 backdrop-blur lg:hidden" aria-label="Hojas">

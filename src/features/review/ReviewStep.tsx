@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 function describe(s: ParsedSheet): string {
   if (s.kind === 'empty') return s.reason
   if (s.kind === 'runt') return `${s.markets.map((m) => m.name).join(', ')}${s.own ? ` y ventas ${s.own.name}` : ''}, ${s.years.join(' vs ')}.`
+  if (s.kind === 'pivot') return `${s.rows.length} ${plural(s.dimensionLabel)}, ${s.series.length} categorías de ${s.measureLabel.toLowerCase()}.`
   if (s.kind === 'flat') {
     const n = s.columns.filter((c) => c.type === 'measure' || c.type === 'number').length
     return `${fmtInt(s.rowCount)} registros, ${n} columnas numéricas.`
@@ -40,6 +41,8 @@ const kindOf = (s: ParsedSheet) =>
       ? { label: 'Mercado RUNT', Icon: Globe2 }
       : s.kind === 'flat'
         ? { label: 'Base de registros', Icon: Table2 }
+        : s.kind === 'pivot'
+          ? { label: 'Tabla dinámica', Icon: LayoutGrid }
         : { label: s.source === 'bloques' ? 'Tabla comparativa' : 'Informe consolidado', Icon: LayoutGrid }
 
 const origin = (id: string) => id.split('-b')[0]
@@ -130,7 +133,7 @@ export function ReviewStep() {
                           </div>
                           {sh.tables.map((t) => (
                             <p key={t.id} className="mt-0.5 text-[13px] text-muted-foreground">
-                              {sh.tables.length > 1 && t.kind === 'matrix' && <span className="font-medium text-ink/70">Por {t.dimensionLabel.toLowerCase()}: </span>}
+                              {sh.tables.length > 1 && (t.kind === 'matrix' || t.kind === 'pivot') && <span className="font-medium text-ink/70">Por {t.dimensionLabel.toLowerCase()}: </span>}
                               {describe(t)}
                             </p>
                           ))}

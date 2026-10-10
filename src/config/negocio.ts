@@ -77,17 +77,17 @@ export const DIMENSION_MARCA_DERIVADA = 'Marca (por código de bodega)'
 /* ---------------- Selección de hojas ---------------- */
 
 /**
- * Hojas que NO se procesan (muy grandes y sin valor para el dashboard comercial).
- * Se listan en la revisión como "omitidas". Ej: TERCEROS 2026 (≈180.000 filas con NIT).
+ * Hojas que NO se procesan por su tamaño y porque no aportan al dashboard comercial.
+ * Pagarés pendientes se procesa cuando viene acotada y queda desmarcada por confidencialidad.
  */
-export const HOJAS_NO_PROCESAR = /^(terceros|pagar[eé]s pendientes)\b/i
+export const HOJAS_NO_PROCESAR = /^terceros\b/i
 
 /**
  * Hojas que se procesan pero quedan DESMARCADAS por defecto en la revisión de hojas:
  * estados financieros, contabilidad, datos de socios o terceros. Puedes marcarlas manualmente.
  */
 export const HOJAS_CONFIDENCIALES =
-  /(terceros|socio|reparto|mayor|pcga|balance|revelaciones|estado de|flujo|patri|paraflujo|indice|revisoria|requerimiento|gasto|presupuesto|fiscal|rentabilidad|analisis ingresos|caratula|^hoja\d*$|anulacion)/i
+  /(terceros|pagar[eé]s? pendientes|socio|reparto|mayor|pcga|balance|revelaciones|estado de|flujo|patri|paraflujo|indice|revisoria|requerimiento|gasto|presupuesto|fiscal|rentabilidad|analisis ingresos|caratula|^hoja\d*$|anulacion)/i
 
 /* ---------------- Marcas y colores (paleta del reporte de gerencia) ---------------- */
 

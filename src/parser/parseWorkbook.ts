@@ -7,6 +7,7 @@ import type { ParsedWorkbook } from '@/types/report'
 import { readWorkbook } from './readWorkbook'
 import { parseRawSheet } from './detect'
 import { HOJAS_CONFIDENCIALES, HOJAS_NO_PROCESAR } from '@/config/negocio'
+import { parseBudgetExecutionWorkbook } from './budgetExecutionParser'
 
 export { parseRawSheet }
 
@@ -16,6 +17,12 @@ export function parseWorkbook(buf: ArrayBuffer, docIndex: number, fileName: stri
   const t0 = Date.now()
   onProgress?.('Leyendo hojas del archivo', 15)
   const raws = readWorkbook(buf, { skip: (n) => HOJAS_NO_PROCESAR.test(n) })
+  const budgetReports = parseBudgetExecutionWorkbook(raws, { docIndex, fileName })
+  if (budgetReports) {
+    onProgress?.('Interpretando tablas de ejecución presupuestal', 80)
+    onProgress?.('Reporte presupuestal listo', 100)
+    return { docIndex, fileName, fileSize: buf.byteLength, sheets: budgetReports, parseMs: Date.now() - t0 }
+  }
   onProgress?.(`Detectando estructura de ${raws.length} hoja(s)`, 55)
   const sheets = raws.flatMap((raw, i) => {
     const s = parseRawSheet(raw, docIndex, fileName, i)
@@ -25,7 +32,7 @@ export function parseWorkbook(buf: ArrayBuffer, docIndex: number, fileName: stri
   // Si alguna tabla del archivo es de motos, las demás tablas de cantidades también se rotulan "motos"
   if (sheets.some((s) => s.kind === 'matrix' && s.unit.label === 'motos')) {
     for (const s of sheets) {
-      if (s.kind === 'matrix' && s.unit.kind === 'units' && s.unit.label !== 'motos' && !HOJAS_CONFIDENCIALES.test(s.name)) {
+      if (s.kind === 'matrix' && s.unit.kind === 'units' && s.unit.label !== 'motos' && !HOJAS_CONFIDENCIALES.test(s.name) && !/^ejecucion de financieras\b/i.test(s.name.trim())) {
         s.unit = { kind: 'units', label: 'motos' }
         const m = s.metrics.find((x) => x.label === 'Unidades')
         if (m) m.label = 'Motos vendidas'

@@ -11,6 +11,7 @@ import { ReviewStep } from '@/features/review/ReviewStep'
 
 export default function App() {
   const step = useAppStore((s) => s.step)
+
   return (
     <TooltipProvider delayDuration={200}>
       {step === 'onboarding' && <Onboarding />}

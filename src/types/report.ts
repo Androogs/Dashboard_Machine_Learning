@@ -112,6 +112,8 @@ export interface MatrixSheet {
   sheetName?: string
   /** Nombre corto de la tabla dentro de la hoja (ej: "Sede", "Marca") */
   tableLabel?: string
+  /** Presentación específica para el resumen del reporte de ejecución presupuestal. */
+  presentation?: 'budget-summary'
   id: string
   name: string
   docIndex: number
@@ -216,7 +218,24 @@ export interface RuntSheet {
   notes: string[]
 }
 
-export type ParsedSheet = MatrixSheet | FlatSheet | RuntSheet | EmptySheet
+/** Hoja de tabla dinámica: una dimensión en filas y categorías en columnas. */
+export interface PivotSheet {
+  kind: 'pivot'
+  id: string
+  name: string
+  sheetName?: string
+  tableLabel?: string
+  docIndex: number
+  fileName: string
+  title: string
+  dimensionLabel: string
+  measureLabel: string
+  series: string[]
+  rows: Array<{ label: string; values: (number | null)[] }>
+  notes: string[]
+}
+
+export type ParsedSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | EmptySheet
 
 export interface ParsedWorkbook {
   docIndex: number
@@ -236,7 +255,7 @@ export interface ParsedWorkbook {
  * - pair:   la misma hoja en Documento 1 vs Documento 2
  */
 export type Report =
-  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | RuntSheet }
+  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | PivotSheet | RuntSheet }
   | { id: string; mode: 'pair'; title: string; a: MatrixSheet | FlatSheet; b: MatrixSheet | FlatSheet }
 
 export type InsightType = 'hallazgo' | 'riesgo' | 'oportunidad' | 'calidad'

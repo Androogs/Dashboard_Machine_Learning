@@ -77,8 +77,8 @@ export function KpiStripe({ tone, label, value, delta, note }: { tone: keyof typ
   )
 }
 
-export function KpiRow({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{children}</div>
+export function KpiRow({ children, columns = 4 }: { children: ReactNode; columns?: 3 | 4 }) {
+  return <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2', columns === 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-4')}>{children}</div>
 }
 
 /* ---------------- Tarjeta de gráfica ---------------- */
