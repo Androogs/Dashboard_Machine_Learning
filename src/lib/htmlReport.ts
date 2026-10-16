@@ -1,4 +1,4 @@
-import type { FlatSheet, MatrixSheet, PivotSheet, Report, RuntSheet } from '@/types/report'
+import type { AsiVamosSheet, FlatSheet, MatrixSheet, PivotSheet, Report, RuntSheet } from '@/types/report'
 import { computeFlat, defaultFlatConfig, dimensions, measures } from '@/analysis/flat'
 import { computeFlatPair, computeMatrixPair } from '@/analysis/compare'
 import { buildEnv, defaultEnvConfig, topGrowth } from '@/analysis/env'
@@ -9,7 +9,7 @@ import { valueFormat } from '@/lib/units'
 import { COLOR_COMPARACION } from '@/config/negocio'
 import logoUrl from '@/assets/logo-sumoto.png?inline'
 
-type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet
+type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet
 type TableRow = Array<string | number | null>
 
 /** Franjas de color de los KPIs (mismo sistema que el dashboard). */
@@ -301,7 +301,20 @@ function singleReport(sheet: SingleSheet): string {
   if (sheet.kind === 'matrix') return matrixReport(sheet)
   if (sheet.kind === 'flat') return flatReport(sheet)
   if (sheet.kind === 'pivot') return pivotReport(sheet)
+  if (sheet.kind === 'asivamos') return asivamosReport(sheet)
   return runtReport(sheet)
+}
+
+function asivamosReport(sheet: AsiVamosSheet): string {
+  const { rows } = sheet
+  const totalAHoy = rows.reduce((a, r) => a + r.aHoy, 0)
+  const totalAHoyCoti = rows.reduce((a, r) => a + r.aHoyCoti, 0)
+  const totalPendiente = rows.reduce((a, r) => a + r.seguimientoPendiente, 0)
+  const totalEfectividad = rows.reduce((a, r) => a + r.efectividad, 0) / rows.length
+  const tr = (v: number) => new Intl.NumberFormat('es-CO').format(v)
+  const pct = (v: number) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(v * 100) + ' %'
+  const rowsHtml = rows.map((r) => `<tr><td>${escapeHtml(r.asesor)}</td><td class="n">${tr(r.aHoy)}</td><td class="n">${tr(r.aHoyCoti)}</td><td class="n">${pct(r.cumplimientoRads)}</td><td class="n">${pct(r.efectividad)}</td><td class="n">${tr(r.seguimientoPendiente)}</td></tr>`).join('')
+  return `<div class="kpis"><div class="kpi"><div class="v">${tr(totalAHoy)}</div><div class="l">Radicaciones a hoy</div></div><div class="kpi"><div class="v">${tr(totalAHoyCoti)}</div><div class="l">Cotizaciones a hoy</div></div><div class="kpi"><div class="v">${pct(totalEfectividad)}</div><div class="l">Efectividad</div></div><div class="kpi"><div class="v">${tr(totalPendiente)}</div><div class="l">Seguimiento pendientes</div></div></div><table><thead><tr><th>Asesor</th><th class="n">Radicaciones</th><th class="n">Cotizaciones</th><th class="n">% Cumpl.</th><th class="n">Efectividad</th><th class="n">Pendientes</th></tr></thead><tbody>${rowsHtml}</tbody></table>`
 }
 
 function matrixPairReport(a: MatrixSheet, b: MatrixSheet): string {

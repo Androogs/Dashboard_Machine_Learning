@@ -27,6 +27,7 @@ function describe(s: ParsedSheet): string {
     const n = s.columns.filter((c) => c.type === 'measure' || c.type === 'number').length
     return `${fmtInt(s.rowCount)} registros, ${n} columnas numéricas.`
   }
+  if (s.kind === 'asivamos') return `${s.rows.length} asesores, corte mes ${s.meta.mes ?? '—'}.`
   const items = s.rows.filter((r) => r.type === 'item').length
   const periods = [...new Map(valueMetrics(s).flatMap((m) => m.periods).map((p) => [p.key, p])).values()].sort((a, b) => a.key.localeCompare(b.key))
   const range = periods.length ? `${periods[0].label} a ${periods.at(-1)!.label}` : ''
@@ -43,7 +44,9 @@ const kindOf = (s: ParsedSheet) =>
         ? { label: 'Base de registros', Icon: Table2 }
         : s.kind === 'pivot'
           ? { label: 'Tabla dinámica', Icon: LayoutGrid }
-        : { label: s.source === 'bloques' ? 'Tabla comparativa' : 'Informe consolidado', Icon: LayoutGrid }
+          : s.kind === 'asivamos'
+            ? { label: 'Resumen Asesores', Icon: BarChart3 }
+            : { label: s.source === 'bloques' ? 'Tabla comparativa' : 'Informe consolidado', Icon: LayoutGrid }
 
 const origin = (id: string) => id.split('-b')[0]
 

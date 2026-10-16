@@ -39,7 +39,9 @@ export function groupBySheet(reports: Report[]): SheetEntry[] {
         ? s.tableLabel ?? s.dimensionLabel
         : s.kind === 'flat'
           ? s.tableLabel ?? 'Registros'
-          : 'Mercado'
+          : s.kind === 'asivamos'
+            ? 'Resumen'
+            : 'Mercado'
     entry.tables.push({ id: r.id, label: `Por ${label.toLowerCase()}`, report: r })
   }
   return out.sort((a, b) => a.docIndex - b.docIndex)

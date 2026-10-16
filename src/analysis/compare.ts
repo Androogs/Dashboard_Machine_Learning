@@ -7,7 +7,7 @@
  * Para bases planas, por defecto se comparan SOLO los meses presentes en ambos
  * documentos (ej: Ene-Sep 2026 vs Ene-Sep 2025) para que la comparación sea justa.
  */
-import type { FlatSheet, MatrixSheet, ParsedWorkbook, PivotSheet, Report, RuntSheet, UnitInfo } from '@/types/report'
+import type { FlatSheet, MatrixSheet, ParsedWorkbook, PivotSheet, Report, RuntSheet, AsiVamosSheet, UnitInfo } from '@/types/report'
 import { monthShort, norm, shortLabel, variation } from '@/lib/format'
 import { computeMatrix, type MatrixConfig } from './matrix'
 import { dominantYear, monthKeyOf } from './flat'
@@ -33,7 +33,7 @@ export function sheetTitle(s: MatrixSheet | FlatSheet | PivotSheet | RuntSheet):
 }
 
 export function buildReports(workbooks: ParsedWorkbook[]): Report[] {
-  type Data = MatrixSheet | FlatSheet | PivotSheet | RuntSheet
+  type Data = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet
   const data = (wb?: ParsedWorkbook) => (wb?.sheets ?? []).filter((s): s is Data => s.kind !== 'empty')
   const single = (s: Data, suffix = ''): Report => ({ id: s.id, mode: 'single', title: `${sheetTitle(s)}${suffix}`, sheet: s })
   const w1 = workbooks.find((w) => w.docIndex === 0)
