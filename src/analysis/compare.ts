@@ -23,8 +23,8 @@ const fileTitle = (f: string) => f.replace(/\.(xlsx|xlsm|xls)$/i, '').trim()
 const isGeneric = (n: string) => /^(sheet|hoja)\s*\d*$/i.test(n.trim())
 
 /** Título legible de un reporte de una hoja. */
-export function sheetTitle(s: MatrixSheet | FlatSheet | PivotSheet | RuntSheet): string {
-  if (s.kind === 'runt' || s.kind === 'pivot') return s.title
+export function sheetTitle(s: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet): string {
+  if (s.kind === 'runt' || s.kind === 'pivot' || s.kind === 'asivamos') return s.title
   if (!isGeneric(s.name)) return s.name.trim()
   // Exportaciones del DMS con nombre de archivo automático (ej: "Grd_20261002150704"): se usa el nombre del reporte
   const file = fileTitle(s.fileName)
@@ -48,7 +48,7 @@ export function buildReports(workbooks: ParsedWorkbook[]): Report[] {
   const reports: Report[] = []
 
   for (const s of a) {
-    if (s.kind === 'runt' || s.kind === 'pivot') {
+    if (s.kind === 'runt' || s.kind === 'pivot' || s.kind === 'asivamos') {
       reports.push(single(s))
       continue
     }
