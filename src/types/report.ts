@@ -235,7 +235,7 @@ export interface PivotSheet {
   notes: string[]
 }
 
-export type ParsedSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | EmptySheet
+export type ParsedSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | AsiVamosMarcaSheet | EmptySheet
 
 /* ------------------------------------------------------------------ */
 /* Hoja tipo ASI VAMOS (resumen por asesor comercial)                 */
@@ -300,6 +300,45 @@ export interface AsiVamosSheet {
   rows: AsiVamosRow[]
 }
 
+/* ------------------------------------------------------------------ */
+/* Hoja tipo ASI VAMOS CONSOLIDADO (varias marcas en un mismo archivo) */
+/* ------------------------------------------------------------------ */
+
+export interface AsiVamosConsolidadoSheet {
+  kind: 'asivamosConsolidado'
+  id: string
+  name: string
+  docIndex: number
+  fileName: string
+  title: string
+  sheetName?: string
+  meta: AsiVamosMeta
+  /** Lista de marcas detectadas (orden de aparición) */
+  brands: string[]
+  /** Datos de asesores agrupados por marca */
+  brandData: Record<string, AsiVamosRow[]>
+  notes: string[]
+}
+
+/* ------------------------------------------------------------------ */
+/* Hoja tipo ASI VAMOS MARCA (una hoja individual de marca dentro del  */
+/* consolidado; solo existe internamente, se consolida antes del reporte) */
+/* ------------------------------------------------------------------ */
+
+export interface AsiVamosMarcaSheet {
+  kind: 'asiVamosMarca'
+  id: string
+  name: string
+  docIndex: number
+  fileName: string
+  title: string
+  sheetName?: string
+  meta: AsiVamosMeta
+  brand: string
+  rows: AsiVamosRow[]
+  notes: string[]
+}
+
 export interface ParsedWorkbook {
   docIndex: number
   fileName: string
@@ -318,7 +357,7 @@ export interface ParsedWorkbook {
  * - pair:   la misma hoja en Documento 1 vs Documento 2
  */
 export type Report =
-  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet }
+  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet }
   | { id: string; mode: 'pair'; title: string; a: MatrixSheet | FlatSheet; b: MatrixSheet | FlatSheet }
 
 export type InsightType = 'hallazgo' | 'riesgo' | 'oportunidad' | 'calidad'

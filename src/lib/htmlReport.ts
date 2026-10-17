@@ -1,4 +1,4 @@
-import type { AsiVamosSheet, FlatSheet, MatrixSheet, PivotSheet, Report, RuntSheet } from '@/types/report'
+import type { AsiVamosConsolidadoSheet, AsiVamosSheet, FlatSheet, MatrixSheet, PivotSheet, Report, RuntSheet } from '@/types/report'
 import { computeFlat, defaultFlatConfig, dimensions, measures } from '@/analysis/flat'
 import { computeFlatPair, computeMatrixPair } from '@/analysis/compare'
 import { buildEnv, defaultEnvConfig, topGrowth } from '@/analysis/env'
@@ -9,7 +9,7 @@ import { valueFormat } from '@/lib/units'
 import { COLOR_COMPARACION } from '@/config/negocio'
 import logoUrl from '@/assets/logo-sumoto.png?inline'
 
-type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet
+type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet
 type TableRow = Array<string | number | null>
 
 /** Franjas de color de los KPIs (mismo sistema que el dashboard). */
@@ -302,6 +302,7 @@ function singleReport(sheet: SingleSheet): string {
   if (sheet.kind === 'flat') return flatReport(sheet)
   if (sheet.kind === 'pivot') return pivotReport(sheet)
   if (sheet.kind === 'asivamos') return asivamosReport(sheet)
+  if (sheet.kind === 'asivamosConsolidado') return asivamosConsolidadoReport(sheet)
   return runtReport(sheet)
 }
 
@@ -315,6 +316,28 @@ function asivamosReport(sheet: AsiVamosSheet): string {
   const pct = (v: number) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(v * 100) + ' %'
   const rowsHtml = rows.map((r) => `<tr><td>${escapeHtml(r.asesor)}</td><td class="n">${tr(r.aHoy)}</td><td class="n">${tr(r.aHoyCoti)}</td><td class="n">${pct(r.cumplimientoRads)}</td><td class="n">${pct(r.efectividad)}</td><td class="n">${tr(r.seguimientoPendiente)}</td></tr>`).join('')
   return `<div class="kpis"><div class="kpi"><div class="v">${tr(totalAHoy)}</div><div class="l">Radicaciones a hoy</div></div><div class="kpi"><div class="v">${tr(totalAHoyCoti)}</div><div class="l">Cotizaciones a hoy</div></div><div class="kpi"><div class="v">${pct(totalEfectividad)}</div><div class="l">Efectividad</div></div><div class="kpi"><div class="v">${tr(totalPendiente)}</div><div class="l">Seguimiento pendientes</div></div></div><table><thead><tr><th>Asesor</th><th class="n">Radicaciones</th><th class="n">Cotizaciones</th><th class="n">% Cumpl.</th><th class="n">Efectividad</th><th class="n">Pendientes</th></tr></thead><tbody>${rowsHtml}</tbody></table>`
+}
+
+function asivamosConsolidadoReport(sheet: AsiVamosConsolidadoSheet): string {
+  const { brands, brandData } = sheet
+  const allRows = brands.flatMap((b) => brandData[b])
+  const totalMeta = allRows.reduce((a, r) => a + r.metaVentas, 0)
+  const totalAHoy = allRows.reduce((a, r) => a + r.aHoy, 0)
+  const totalAHoyCoti = allRows.reduce((a, r) => a + r.aHoyCoti, 0)
+  const totalPendiente = allRows.reduce((a, r) => a + r.seguimientoPendiente, 0)
+  const tr = (v: number) => new Intl.NumberFormat('es-CO').format(v)
+  const pct = (v: number) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(v * 100) + ' %'
+
+  const brandBlocks = brands.map((b) => {
+    const rows = brandData[b]
+    const metaB = rows.reduce((a, r) => a + r.metaVentas, 0)
+    const ahoyB = rows.reduce((a, r) => a + r.aHoy, 0)
+    const ahoyCotiB = rows.reduce((a, r) => a + r.aHoyCoti, 0)
+    const rowsHtml = rows.map((r) => `<tr><td>${escapeHtml(r.asesor)}</td><td class="n">${tr(r.aHoy)}</td><td class="n">${tr(r.aHoyCoti)}</td><td class="n">${pct(r.cumplimientoRads)}</td><td class="n">${pct(r.efectividad)}</td><td class="n">${tr(r.seguimientoPendiente)}</td></tr>`).join('')
+    return `<h3>Marca ${b}</h3><div class="kpis"><div class="kpi"><div class="v">${tr(metaB)}</div><div class="l">RAD_META</div></div><div class="kpi"><div class="v">${tr(ahoyB)}</div><div class="l">RAD_A_HOY</div></div><div class="kpi"><div class="v">${tr(ahoyCotiB)}</div><div class="l">COTIZACIONES</div></div></div><table><thead><tr><th>Asesor</th><th class="n">Radicaciones</th><th class="n">Cotizaciones</th><th class="n">% Cumpl.</th><th class="n">Efectividad</th><th class="n">Pendientes</th></tr></thead><tbody>${rowsHtml}</tbody></table>`
+  }).join('')
+
+  return `<div class="kpis"><div class="kpi"><div class="v">${tr(totalMeta)}</div><div class="l">RAD_META (todas las marcas)</div></div><div class="kpi"><div class="v">${tr(totalAHoy)}</div><div class="l">RADICACIONES A HOY</div></div><div class="kpi"><div class="v">${tr(totalAHoyCoti)}</div><div class="l">COTIZACIONES A HOY</div></div><div class="kpi"><div class="v">${tr(totalPendiente)}</div><div class="l">SEGUIMIENTO PENDIENTE</div></div></div>${brandBlocks}`
 }
 
 function matrixPairReport(a: MatrixSheet, b: MatrixSheet): string {

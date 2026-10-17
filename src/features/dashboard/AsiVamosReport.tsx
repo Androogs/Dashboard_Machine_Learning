@@ -86,8 +86,8 @@ export function AsiVamosReport({ sheet }: { sheet: AsiVamosSheet }) {
             value={f(totalAHoyCoti)}
             sub={`${variation(totalAHoyCoti, totalDebeLlevarCoti) != null ? fmtPct(variation(totalAHoyCoti, totalDebeLlevarCoti)) : '—'} vs debe llevar`}
           />
-          <KpiCard label="% EFECTIVIDAD GLOBAL" value={fmtPct(totalEfectividad)} sub="Promedio asesores" />
-          <KpiCard label="NEGOCIOS EN SEGUIMIENTO (PENDIENTES)" value={fInt(totalPendiente)} sub={`Realizados ${fInt(totalRealizado)}`} />
+          <KpiCard label="EFECTIVIDAD GLOBAL %" value={fmtPct(totalEfectividad)} sub="Promedio asesores" />
+          <KpiCard label="SEGUIMIENTOS PENDIENTES" value={fInt(totalPendiente)} sub={`Realizados ${fInt(totalRealizado)}`} />
         </Grid>
 
         <ChartCard title="EVOLUCIÓN DE RADICACIONES (A HOY VS DEBE LLEVAR)" description={`Por asesor · ${corteLabel}`}>

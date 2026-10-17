@@ -6,7 +6,7 @@
  */
 import { useMemo } from 'react'
 import { ArrowLeft, BarChart3, CheckSquare, FileSpreadsheet, LayoutGrid, ShieldAlert, Square, Table2, Ban, Globe2 } from 'lucide-react'
-import type { ParsedSheet } from '@/types/report'
+import type { ParsedSheet, AsiVamosMarcaSheet } from '@/types/report'
 import { useAppStore, defaultSelection } from '@/store/useAppStore'
 import { HOJAS_CONFIDENCIALES } from '@/config/negocio'
 import { buildReports } from '@/analysis/compare'
@@ -28,11 +28,15 @@ function describe(s: ParsedSheet): string {
     return `${fmtInt(s.rowCount)} registros, ${n} columnas numéricas.`
   }
   if (s.kind === 'asivamos') return `${s.rows.length} asesores, corte mes ${s.meta.mes ?? '—'}.`
-  const items = s.rows.filter((r) => r.type === 'item').length
-  const periods = [...new Map(valueMetrics(s).flatMap((m) => m.periods).map((p) => [p.key, p])).values()].sort((a, b) => a.key.localeCompare(b.key))
+  if (s.kind === 'asivamosConsolidado') return `${s.brands.length} marca(s), ${s.brands.map((b) => `${b}: ${s.brandData[b].length}`).join(', ')}.`
+  if ((s.kind as string) === 'asivamosMarca') return `${(s as AsiVamosMarcaSheet).rows.length} asesores de la marca ${(s as AsiVamosMarcaSheet).brand}.`
+  if (s.kind !== 'matrix') return ''
+  const matrix = s as Extract<ParsedSheet, { kind: 'matrix' }>
+  const items = matrix.rows.filter((r) => r.type === 'item').length
+  const periods = [...new Map(valueMetrics(matrix).flatMap((m) => m.periods).map((p) => [p.key, p])).values()].sort((a, b) => a.key.localeCompare(b.key))
   const range = periods.length ? `${periods[0].label} a ${periods.at(-1)!.label}` : ''
-  const unit = s.unit.kind === 'money' ? 'en pesos' : `en ${s.unit.label}`
-  return `${items} ${plural(s.dimensionLabel)}${s.groups.length > 1 ? ` en ${s.groups.length} grupos` : ''}, ${periods.length} periodos (${range}), ${unit}.`
+  const unit = matrix.unit.kind === 'money' ? 'en pesos' : `en ${matrix.unit.label}`
+  return `${items} ${plural(matrix.dimensionLabel)}${matrix.groups.length > 1 ? ` en ${matrix.groups.length} grupos` : ''}, ${periods.length} periodos (${range}), ${unit}.`
 }
 
 const kindOf = (s: ParsedSheet) =>
@@ -46,7 +50,13 @@ const kindOf = (s: ParsedSheet) =>
           ? { label: 'Tabla dinámica', Icon: LayoutGrid }
           : s.kind === 'asivamos'
             ? { label: 'Resumen Asesores', Icon: BarChart3 }
-            : { label: s.source === 'bloques' ? 'Tabla comparativa' : 'Informe consolidado', Icon: LayoutGrid }
+            : s.kind === 'asivamosConsolidado'
+              ? { label: 'Consolidado Marcas', Icon: BarChart3 }
+            : (s.kind as string) === 'asivamosMarca'
+              ? { label: `Marca ${(s as AsiVamosMarcaSheet).brand}`, Icon: BarChart3 }
+              : s.kind === 'matrix'
+                ? { label: (s as Extract<ParsedSheet, { kind: 'matrix' }>).source === 'bloques' ? 'Tabla comparativa' : 'Informe consolidado', Icon: LayoutGrid }
+                : { label: 'Sin estructura', Icon: Ban }
 
 const origin = (id: string) => id.split('-b')[0]
 

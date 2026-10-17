@@ -8,6 +8,7 @@ import { readWorkbook } from './readWorkbook'
 import { parseRawSheet } from './detect'
 import { HOJAS_CONFIDENCIALES, HOJAS_NO_PROCESAR } from '@/config/negocio'
 import { parseBudgetExecutionWorkbook } from './budgetExecutionParser'
+import { consolidateAsiVamosMarcaSheets } from './asivamosConsolidadoParser'
 
 export { parseRawSheet }
 
@@ -38,6 +39,17 @@ export function parseWorkbook(buf: ArrayBuffer, docIndex: number, fileName: stri
         if (m) m.label = 'Motos vendidas'
         for (const c of s.columns) if (c.metricLabel === 'Unidades') c.metricLabel = 'Motos vendidas'
       }
+    }
+  }
+  // Consolidar hojas ASI VAMOS por marca (BAJAJ, HONDA, SUZUKI, etc.) del mismo libro
+  // en un solo reporte AsiVamosConsolidadoSheet con pestañas por marca.
+  const marcaSheets = sheets.filter((s): s is Extract<typeof sheets[number], { kind: 'asiVamosMarca' }> => s.kind === 'asiVamosMarca')
+  if (marcaSheets.length > 1) {
+    const consolidated = consolidateAsiVamosMarcaSheets(marcaSheets, { id: `d${docIndex}-s-consolidado`, docIndex, fileName })
+    if (consolidated) {
+      const otherSheets = sheets.filter((s) => s.kind !== 'asiVamosMarca')
+      sheets.length = 0
+      sheets.push(...otherSheets, consolidated)
     }
   }
   return { docIndex, fileName, fileSize: buf.byteLength, sheets, parseMs: Date.now() - t0 }

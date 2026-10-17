@@ -16,6 +16,7 @@ import { isRuntSheet, parseRunt } from './runtParser'
 import { parsePivotSheet } from './pivotParser'
 import { parseExecutionSheet } from './executionParser'
 import { parseAsiVamos } from './asivamosParser'
+import { parseAsiVamosMarcaSheet } from './asivamosConsolidadoParser'
 import { norm } from '@/lib/format'
 
 function splitDisbursementMetrics(sheets: ReturnType<typeof parseBlocks>): ParsedSheet[] {
@@ -58,6 +59,22 @@ export function parseRawSheet(raw: RawSheet & { skipped?: boolean }, docIndex: n
     if (/asi vamos/.test(norm(sheetName))) {
       const asi = parseAsiVamos(raw, ctx)
       if (asi) return [{ ...asi, sheetName }]
+    }
+    const marcaAsi = parseAsiVamosMarcaSheet(raw)
+    if (marcaAsi) {
+      return [{
+        kind: 'asiVamosMarca',
+        id,
+        name: marcaAsi.title,
+        docIndex,
+        fileName,
+        title: marcaAsi.title,
+        sheetName,
+        meta: marcaAsi.meta,
+        brand: marcaAsi.brand,
+        rows: marcaAsi.rows,
+        notes: marcaAsi.notes,
+      }]
     }
     const normalizedName = norm(sheetName)
     const hasUnlabeledExecutionGroups = raw.rows.some((row) => {
