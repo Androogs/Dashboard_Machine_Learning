@@ -24,6 +24,7 @@ export function AsiVamosReport({ sheet }: { sheet: AsiVamosSheet }) {
   const totalMeta = rows.reduce((a, r) => a + r.metaVentas, 0)
   const totalDebeLlevar = rows.reduce((a, r) => a + r.debeLlevar, 0)
   const totalAHoy = rows.reduce((a, r) => a + r.aHoy, 0)
+  const totalMetaCoti = rows.reduce((a, r) => a + r.metaCoti, 0)
   const totalDebeLlevarCoti = rows.reduce((a, r) => a + r.debeLlevarCoti, 0)
   const totalAHoyCoti = rows.reduce((a, r) => a + r.aHoyCoti, 0)
   const totalCumplimientoRads = rows.reduce((a, r) => a + r.cumplimientoRads, 0) / rows.length
@@ -83,9 +84,9 @@ export function AsiVamosReport({ sheet }: { sheet: AsiVamosSheet }) {
 />
           <KpiCard
             label="COTIZACIONES TOTALES (A HOY)"
-            value={f(totalAHoyCoti)}
+            value={`${f(totalAHoyCoti)} / ${f(totalMetaCoti)}`}
             sub={`${variation(totalAHoyCoti, totalDebeLlevarCoti) != null ? fmtPct(variation(totalAHoyCoti, totalDebeLlevarCoti)) : '—'} vs debe llevar`}
-          />
+/>
           <KpiCard label="EFECTIVIDAD GLOBAL %" value={fmtPct(totalEfectividad)} sub="Promedio asesores" />
           <KpiCard label="SEGUIMIENTOS PENDIENTES" value={fInt(totalPendiente)} sub={`Realizados ${fInt(totalRealizado)}`} />
         </Grid>
