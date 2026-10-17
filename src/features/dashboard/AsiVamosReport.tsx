@@ -78,9 +78,9 @@ export function AsiVamosReport({ sheet }: { sheet: AsiVamosSheet }) {
           <KpiCard
             emphasis
             label="RADICACIONES TOTALES (A HOY)"
-            value={f(totalAHoy)}
+            value={`${f(totalAHoy)} / ${f(totalMeta)}`}
             sub={`${variation(totalAHoy, totalDebeLlevar) != null ? fmtPct(variation(totalAHoy, totalDebeLlevar)) : '—'} vs debe llevar`}
-          />
+/>
           <KpiCard
             label="COTIZACIONES TOTALES (A HOY)"
             value={f(totalAHoyCoti)}
