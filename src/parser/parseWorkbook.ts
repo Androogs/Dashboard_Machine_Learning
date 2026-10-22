@@ -9,6 +9,8 @@ import { parseRawSheet } from './detect'
 import { HOJAS_CONFIDENCIALES, HOJAS_NO_PROCESAR } from '@/config/negocio'
 import { parseBudgetExecutionWorkbook } from './budgetExecutionParser'
 import { consolidateAsiVamosMarcaSheets } from './asivamosConsolidadoParser'
+import { parseComercialWorkbook } from './comercialParser'
+import { norm } from '@/lib/format'
 
 export { parseRawSheet }
 
@@ -51,6 +53,16 @@ export function parseWorkbook(buf: ArrayBuffer, docIndex: number, fileName: stri
       sheets.length = 0
       sheets.push(...otherSheets, consolidated)
     }
+  }
+  // Libro "Así vamos" compilado (ASI VAMOS + hojas del CRM + tablas dinámicas):
+  // se arma el tablero comercial (por sede y por marca) y reemplaza a ASI VAMOS y a las tablas td.
+  onProgress?.('Armando tablero comercial', 97)
+  const comercial = parseComercialWorkbook(raws, { docIndex, fileName })
+  if (comercial) {
+    const consumed = new Set(comercial.consumed.map((n) => norm(n)))
+    const rest = sheets.filter((s) => !consumed.has(norm(('sheetName' in s && s.sheetName) || s.name)))
+    sheets.length = 0
+    sheets.push(...comercial.sheets, ...rest)
   }
   return { docIndex, fileName, fileSize: buf.byteLength, sheets, parseMs: Date.now() - t0 }
 }

@@ -109,6 +109,7 @@ export const MARCAS: { key: RegExp; label: string; color: string }[] = [
   { key: /yamaha/i, label: 'Yamaha', color: '#1a2b5e' },
   { key: /victory/i, label: 'Victory', color: '#9B59B6' },
   { key: /\btvs\b/i, label: 'TVS', color: '#0F6E56' },
+  { key: /auteco/i, label: 'Auteco', color: '#2e3d7a' },
 ]
 
 /** Color del año/periodo de comparación (barras "2025") */
@@ -120,3 +121,15 @@ export const PALETA_RUNT = ['#1a2b5e', '#E05A1E', '#1D9E75', '#378ADD', '#BA7517
 
 export const brandOf = (text: string) => MARCAS.find((m) => m.key.test(text))
 export const colorOf = (text: string, fallback = '#378ADD') => brandOf(text)?.color ?? fallback
+
+/* ---------------- Tablero comercial (Así vamos compilado) ---------------- */
+
+/**
+ * SUPUESTO: marca de asesores cuyo bloque no tiene título en la hoja ASI VAMOS y que no
+ * aparecen en las hojas del CRM. Jenny y Victoria se toman como Honda porque en el reporte
+ * "ASI VAMOS HONDA Y HERO" su bloque cerraba con "TOTAL HONDA". Ajusta aquí si cambia.
+ */
+export const MARCA_POR_ASESOR: Record<string, string> = {
+  JENNY: 'Honda',
+  VICTORIA: 'Honda',
+}

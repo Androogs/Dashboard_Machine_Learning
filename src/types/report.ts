@@ -235,7 +235,82 @@ export interface PivotSheet {
   notes: string[]
 }
 
-export type ParsedSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | AsiVamosMarcaSheet | EmptySheet
+/* ------------------------------------------------------------------ */
+/* Tablero comercial (libro "Así vamos" compilado)                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Conteo agregado de registros del CRM por asesor, marca, sede y categoría.
+ * Se calcula desde las hojas base (PEDIDO, CREADOS, ACTIVOS, SEGUIMIENTO, ACTIVA ROJOS)
+ * para poder filtrar por marca o por sede; los totales se validan contra las tablas dinámicas.
+ */
+export interface ComercialCount {
+  asesor: string
+  marca: string
+  sede: string
+  /** Cartera / Facturado, origen (Vitrina, Pauta…), prioridad (Alta, Media, Baja) o '' */
+  cat: string
+  n: number
+}
+
+/** Fila del resumen Así vamos (metas y avance por asesor). */
+export interface ComercialAsiVamosRow {
+  asesor: string
+  marca: string
+  sede: string
+  bloque: string
+  /** Radicadas (ventas) */
+  metaVentas: number
+  aHoy: number
+  /** Radicadas por canal, tal como vienen en la hoja */
+  canales: { vitrina: number; pauta: number; organico: number; volante: number; otro: number }
+  /** Cotizaciones */
+  metaCoti: number
+  aHoyCoti: number
+  canalesCoti: { vitrina: number; pauta: number; organico: number; volante: number; otro: number }
+  /** Data activa */
+  dataActiva: number
+  alta: number
+  media: number
+  baja: number
+  segPendiente: number
+  segRealizado: number
+  negCreados: number
+}
+
+/** Control: total recalculado desde la hoja base vs total de la tabla dinámica del Excel. */
+export interface ComercialCheck {
+  label: string
+  hoja: string
+  calculado: number
+  tablaDinamica: number | null
+}
+
+export interface ComercialSheet {
+  kind: 'comercial'
+  id: string
+  name: string
+  sheetName?: string
+  tableLabel: string
+  docIndex: number
+  fileName: string
+  title: string
+  /** Agrupación de las pestañas: por marca (Suzuki, Hero…) o por sede (Suzuki Principal, Hero Palmira…) */
+  groupBy: 'marca' | 'sede'
+  meta: { mes: number | null; diasHabiles: number | null; avance: number | null; hoy: string | null }
+  pedidos: ComercialCount[]
+  creados: ComercialCount[]
+  activos: ComercialCount[]
+  seguimiento: ComercialCount[]
+  rojos: ComercialCount[]
+  asiVamos: ComercialAsiVamosRow[]
+  /** true si el libro trae las hojas del CRM (PEDIDO, CREADOS…); si no, solo se muestra el Así vamos */
+  hasCrm: boolean
+  checks: ComercialCheck[]
+  notes: string[]
+}
+
+export type ParsedSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | AsiVamosMarcaSheet | ComercialSheet | EmptySheet
 
 /* ------------------------------------------------------------------ */
 /* Hoja tipo ASI VAMOS (resumen por asesor comercial)                 */
@@ -357,7 +432,7 @@ export interface ParsedWorkbook {
  * - pair:   la misma hoja en Documento 1 vs Documento 2
  */
 export type Report =
-  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet }
+  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet }
   | { id: string; mode: 'pair'; title: string; a: MatrixSheet | FlatSheet; b: MatrixSheet | FlatSheet }
 
 export type InsightType = 'hallazgo' | 'riesgo' | 'oportunidad' | 'calidad'

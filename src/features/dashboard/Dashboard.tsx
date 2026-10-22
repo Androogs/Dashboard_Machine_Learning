@@ -18,6 +18,7 @@ import { PivotReport } from './PivotReport'
 import { FlatPairReport, MatrixPairReport } from './PairReport'
 import { AsiVamosReport } from './AsiVamosReport'
 import { AsiVamosConsolidadoReport } from './AsiVamosConsolidadoReport'
+import { ComercialReport } from './comercial/ComercialReport'
 import { cn } from '@/lib/utils'
 import { downloadHtmlReport } from '@/lib/htmlReport'
 
@@ -28,6 +29,7 @@ function ReportView({ report, title }: { report: Report; title: string }) {
     if (s.kind === 'pivot') return <PivotReport key={report.id} sheet={s} title={title} />
     if (s.kind === 'asivamos') return <AsiVamosReport key={report.id} sheet={s} />
     if (s.kind === 'asivamosConsolidado') return <AsiVamosConsolidadoReport key={report.id} sheet={s} />
+    if (s.kind === 'comercial') return <ComercialReport key={report.id} sheet={s} />
     if (s.kind === 'matrix') return <EnvReport key={report.id} sheet={s} title={title} />
     return <FlatReport key={report.id} sheet={s} title={title} />
   }

@@ -159,3 +159,37 @@ src/
 ## Stack
 
 React 18 + Vite 5 (TypeScript), Tailwind CSS 3 + shadcn/ui (Radix), Recharts + Chart.js, SheetJS (xlsx), Zustand, tipografía Inter.
+
+## Así vamos (libro "Así vamos" compilado)
+
+El reporte principal es la hoja **ASI VAMOS**. Cuando el libro la trae (con varios bloques: Suzuki, Digital, Sumoto Cali,
+Hero…) y opcionalmente las hojas del CRM (**PEDIDO, CREADOS, ACTIVOS, SEGUIMIENTO, ACTIVA ROJOS**), por ejemplo
+`compilado.xlsx`, la navegación muestra la hoja **ASI VAMOS** con el formato de `dashboard_sumoto_botones_marcas.html`.
+
+La sección **Así vamos** abre por defecto: 8 KPIs (radicadas a hoy, % cumplimiento, cotizaciones, % efectividad,
+proyección al cierre como estimación lineal, data activa, seguimiento pendiente y negocios creados), radicadas y
+cotizaciones vs debe llevar por asesor, radicadas por canal, clasificación de data activa, resumen por marca o sede y
+tabla completa por asesor. Si el libro no trae las hojas del CRM, solo se muestra esta sección.
+
+Las secciones del CRM son complementarias:
+
+- **Tablas de esta hoja: Por sede | Por marca** → cambia las pastillas.
+- **Pastillas**: *Vista general* y una por marca (Suzuki, Hero, Honda, Bajaj…) o por sede (Suzuki Principal, Suzuki Cali, Hero Palmira…).
+- **Encabezado** con el logo de Sumoto, corte (mes, día de avance) y fecha del Así vamos.
+- **Secciones del CRM**: Resumen CRM (4 KPIs, pedidos por asesor y resultado, negocios creados por origen, clasificación de data activa,
+  seguimiento por asesor y tabla de pedidos), Pedidos, Negocios creados, Data activa CRM, Seguimiento y Activa rojos.
+- Las gráficas muestran al pasar el cursor el valor, el % sobre el total de la serie y el % dentro del asesor.
+
+Criterios:
+
+- Las tablas dinámicas (TD PEDIDO, td CREADOS, td ACTIVOS, td SEGUIMIENTO, td ACTIVA ROJOS) solo traen totales por asesor,
+  así que los conteos se **recalculan desde las hojas base** con sus mismos filtros (pedidos: resultado CARTERA o FACTURADO
+  sin anulados; creados: mes del Así vamos) y se **comparan con las tablas dinámicas**; si no cuadran, aparece una nota.
+- Marca y sede salen de la columna **VITRINA / PUNTO DE VENTA** de cada registro ("SUZUKI PRINCIPAL" → Suzuki, Suzuki Principal).
+  Los registros sin vitrina toman la vitrina donde más registra el asesor.
+- En el Así vamos, la marca de cada bloque sale de su título (HERO, BAJAJ…), de las vitrinas de sus asesores o, si no hay
+  ninguna de las dos, de `MARCA_POR_ASESOR` en `src/config/negocio.ts` (hoy: Jenny y Victoria → Honda). Sin hojas del CRM,
+  los bloques sin título de la primera sección toman la marca del nombre del archivo (ej: "suzuki ASI VAMOS…").
+- Debe llevar = meta ÷ días hábiles × día de avance; % cumplimiento = a hoy ÷ debe llevar (se recalculan).
+
+Archivos: `src/parser/comercialParser.ts` (lectura), `src/features/dashboard/comercial/` (pantallas y gráficas).

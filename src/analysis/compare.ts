@@ -7,7 +7,7 @@
  * Para bases planas, por defecto se comparan SOLO los meses presentes en ambos
  * documentos (ej: Ene-Sep 2026 vs Ene-Sep 2025) para que la comparación sea justa.
  */
-import type { FlatSheet, MatrixSheet, ParsedWorkbook, PivotSheet, Report, RuntSheet, AsiVamosSheet, AsiVamosConsolidadoSheet, UnitInfo } from '@/types/report'
+import type { FlatSheet, MatrixSheet, ParsedWorkbook, PivotSheet, Report, RuntSheet, AsiVamosSheet, ComercialSheet, AsiVamosConsolidadoSheet, UnitInfo } from '@/types/report'
 import { monthShort, norm, shortLabel, variation } from '@/lib/format'
 import { computeMatrix, type MatrixConfig } from './matrix'
 import { dominantYear, monthKeyOf } from './flat'
@@ -23,8 +23,8 @@ const fileTitle = (f: string) => f.replace(/\.(xlsx|xlsm|xls)$/i, '').trim()
 const isGeneric = (n: string) => /^(sheet|hoja)\s*\d*$/i.test(n.trim())
 
 /** Título legible de un reporte de una hoja. */
-export function sheetTitle(s: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet): string {
-  if (s.kind === 'runt' || s.kind === 'pivot' || s.kind === 'asivamos' || s.kind === 'asivamosConsolidado') return s.title
+export function sheetTitle(s: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet): string {
+  if (s.kind === 'runt' || s.kind === 'pivot' || s.kind === 'asivamos' || s.kind === 'asivamosConsolidado' || s.kind === 'comercial') return s.title
   if (!isGeneric(s.name)) return s.name.trim()
   // Exportaciones del DMS con nombre de archivo automático (ej: "Grd_20261002150704"): se usa el nombre del reporte
   const file = fileTitle(s.fileName)
@@ -33,7 +33,7 @@ export function sheetTitle(s: MatrixSheet | FlatSheet | PivotSheet | RuntSheet |
 }
 
 export function buildReports(workbooks: ParsedWorkbook[]): Report[] {
-  type Data = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet
+  type Data = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet
   const data = (wb?: ParsedWorkbook) => (wb?.sheets ?? []).filter((s): s is Data => s.kind !== 'empty')
   const single = (s: Data, suffix = ''): Report => ({ id: s.id, mode: 'single', title: `${sheetTitle(s)}${suffix}`, sheet: s })
   const w1 = workbooks.find((w) => w.docIndex === 0)
@@ -48,7 +48,7 @@ export function buildReports(workbooks: ParsedWorkbook[]): Report[] {
   const reports: Report[] = []
 
   for (const s of a) {
-    if (s.kind === 'runt' || s.kind === 'pivot' || s.kind === 'asivamos' || s.kind === 'asivamosConsolidado') {
+    if (s.kind === 'runt' || s.kind === 'pivot' || s.kind === 'asivamos' || s.kind === 'asivamosConsolidado' || s.kind === 'comercial') {
       reports.push(single(s))
       continue
     }

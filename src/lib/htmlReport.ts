@@ -1,4 +1,4 @@
-import type { AsiVamosConsolidadoSheet, AsiVamosSheet, FlatSheet, MatrixSheet, PivotSheet, Report, RuntSheet } from '@/types/report'
+import type { AsiVamosConsolidadoSheet, AsiVamosSheet, ComercialCount, ComercialSheet, FlatSheet, MatrixSheet, PivotSheet, Report, RuntSheet } from '@/types/report'
 import { computeFlat, defaultFlatConfig, dimensions, measures } from '@/analysis/flat'
 import { computeFlatPair, computeMatrixPair } from '@/analysis/compare'
 import { buildEnv, defaultEnvConfig, topGrowth } from '@/analysis/env'
@@ -9,7 +9,7 @@ import { valueFormat } from '@/lib/units'
 import { COLOR_COMPARACION } from '@/config/negocio'
 import logoUrl from '@/assets/logo-sumoto.png?inline'
 
-type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet
+type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet
 type TableRow = Array<string | number | null>
 
 /** Franjas de color de los KPIs (mismo sistema que el dashboard). */
@@ -303,7 +303,63 @@ function singleReport(sheet: SingleSheet): string {
   if (sheet.kind === 'pivot') return pivotReport(sheet)
   if (sheet.kind === 'asivamos') return asivamosReport(sheet)
   if (sheet.kind === 'asivamosConsolidado') return asivamosConsolidadoReport(sheet)
+  if (sheet.kind === 'comercial') return comercialReport(sheet)
   return runtReport(sheet)
+}
+
+/** Tablero comercial (Así vamos compilado): KPIs, resumen por marca o sede y tablas por asesor. */
+function comercialReport(sheet: ComercialSheet): string {
+  const sum = (l: ComercialCount[]) => l.reduce((a, x) => a + x.n, 0)
+  const byCat = (l: ComercialCount[], c: string) => sum(l.filter((x) => x.cat === c))
+  const byAdvisor = (l: ComercialCount[]) => {
+    const m = new Map<string, number>()
+    for (const x of l) m.set(x.asesor, (m.get(x.asesor) ?? 0) + x.n)
+    return [...m.entries()].sort((a, b) => b[1] - a[1])
+  }
+  const key = sheet.groupBy
+  const groups = [...new Set([...sheet.pedidos, ...sheet.creados, ...sheet.activos, ...sheet.seguimiento, ...sheet.rojos].map((x) => x[key]))]
+  const resumen = groups.map((g) => {
+    const f = (l: ComercialCount[]) => sum(l.filter((x) => x[key] === g))
+    return [g, f(sheet.pedidos), f(sheet.creados), f(sheet.activos), f(sheet.seguimiento), f(sheet.rojos)] as TableRow
+  })
+  const ped = sheet.pedidos
+  // Primero el Así vamos (reporte principal)
+  const dias = sheet.meta.diasHabiles ?? 0
+  const av = sheet.meta.avance ?? 0
+  const debe = (m: number) => (dias ? (m / dias) * av : 0)
+  const asi = [...sheet.asiVamos].sort((a, b) => b.aHoy - a.aHoy)
+  const tMeta = asi.reduce((a, r) => a + r.metaVentas, 0)
+  const tHoy = asi.reduce((a, r) => a + r.aHoy, 0)
+  const tCoti = asi.reduce((a, r) => a + r.aHoyCoti, 0)
+  const tMetaCoti = asi.reduce((a, r) => a + r.metaCoti, 0)
+  const asiHtml = [
+    kpis([
+      { label: 'Radicadas a hoy', value: fmtInt(tHoy), detail: `Meta ${fmtInt(tMeta)}, debe llevar ${fmtInt(Math.round(debe(tMeta)))}`, tone: 'blue' },
+      { label: '% cumplimiento radicadas', value: fmtPct(debe(tMeta) ? tHoy / debe(tMeta) : 0), tone: 'green' },
+      { label: 'Cotizaciones a hoy', value: fmtInt(tCoti), detail: `${fmtPct(debe(tMetaCoti) ? tCoti / debe(tMetaCoti) : 0)} del debe llevar`, tone: 'amber' },
+      { label: '% efectividad', value: fmtPct(tCoti ? tHoy / tCoti : 0), detail: 'Radicadas ÷ cotizaciones', tone: 'coral' },
+    ]),
+    table(
+      ['Asesor', 'Marca', 'Sede', 'Meta', 'Debe llevar', 'A hoy', '% cump.', 'Cotiz.', '% efect.', 'Data activa', 'Seg. pend.'],
+      asi.map((r) => [r.asesor, r.marca, r.sede, fmtInt(r.metaVentas), debe(r.metaVentas).toFixed(1).replace('.', ','), fmtInt(r.aHoy), fmtPct(debe(r.metaVentas) ? r.aHoy / debe(r.metaVentas) : 0), fmtInt(r.aHoyCoti), r.aHoyCoti ? fmtPct(r.aHoy / r.aHoyCoti) : '—', fmtInt(r.dataActiva), fmtInt(r.segPendiente)]),
+      'Así vamos por asesor',
+      `Debe llevar = meta ÷ ${dias} días hábiles × día de avance ${av}.`,
+    ),
+  ].join('')
+  if (!sheet.hasCrm) return asiHtml
+  return asiHtml + [
+    kpis([
+      { label: 'Pedidos (total general)', value: fmtInt(sum(ped)), detail: `${fmtInt(byCat(ped, 'Cartera'))} cartera, ${fmtInt(byCat(ped, 'Facturado'))} facturado`, tone: 'blue' },
+      { label: 'Negocios creados', value: fmtInt(sum(sheet.creados)), tone: 'green' },
+      { label: 'Data activa', value: fmtInt(sum(sheet.activos)), detail: `${fmtInt(byCat(sheet.activos, 'Alta'))} alta, ${fmtInt(byCat(sheet.activos, 'Media'))} media, ${fmtInt(byCat(sheet.activos, 'Baja'))} baja`, tone: 'amber' },
+      { label: 'Seguimientos', value: fmtInt(sum(sheet.seguimiento)), tone: 'coral' },
+    ]),
+    table([key === 'marca' ? 'Marca' : 'Sede', 'Pedidos', 'Neg. creados', 'Data activa', 'Seguimientos', 'Activa rojos'], resumen, `Resumen por ${key}`),
+    barChart(byAdvisor(ped).map(([label, value]) => ({ label, value, display: fmtInt(value) })), 'Pedidos por asesor'),
+    barChart(byAdvisor(sheet.seguimiento).map(([label, value]) => ({ label, value, display: fmtInt(value) })), 'Seguimiento por asesor'),
+    table(['Asesor', 'Negocios creados'], byAdvisor(sheet.creados).map(([a, n]) => [a, fmtInt(n)]), 'Negocios creados por asesor'),
+    table(['Asesor', 'Activa rojos'], byAdvisor(sheet.rojos).map(([a, n]) => [a, fmtInt(n)]), 'Activa rojos por asesor', sheet.notes.join(' ')),
+  ].join('')
 }
 
 function asivamosReport(sheet: AsiVamosSheet): string {
