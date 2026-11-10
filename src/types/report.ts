@@ -310,7 +310,53 @@ export interface ComercialSheet {
   notes: string[]
 }
 
-export type ParsedSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | AsiVamosMarcaSheet | ComercialSheet | EmptySheet
+/* ------------------------------------------------------------------ */
+/* Corte de cartera (libro "TODO CORTE …": una fila por documento)      */
+/* ------------------------------------------------------------------ */
+
+/** Grupo comercial de la cartera: motos (prefijo MTE…), repuestos (RPE… o FR) u otras. */
+export type CarteraGroup = 'MT' | 'RP' | 'OTRO'
+
+/** Financieras reconocidas por la jefatura de cartera. */
+export type Financiera = 'ADDI' | 'BRILLA' | 'CREDIORBE' | 'FINAMIGA' | 'INVERSIONES' | 'PROGRESER' | 'SISTECREDITO'
+
+export interface CarteraRow {
+  numero: number | null
+  nit: string
+  cliente: string
+  tipo: string
+  prefijo: string
+  concepto: string
+  /** ms UTC o null */
+  fecha: number | null
+  vencimiento: number | null
+  dias: number | null
+  saldo: number
+  aplicado: number | null
+  bodega: string
+  /** Asesor / vendedor responsable */
+  vendedor: string
+  grupo: CarteraGroup
+  financiera: Financiera | null
+  yoSoy: boolean
+  nota: string
+}
+
+export interface CarteraSheet {
+  kind: 'cartera'
+  id: string
+  name: string
+  sheetName?: string
+  docIndex: number
+  fileName: string
+  title: string
+  /** Nombre de la hoja fuente dentro del libro (normalmente "TODO") */
+  sourceSheet: string
+  rows: CarteraRow[]
+  notes: string[]
+}
+
+export type ParsedSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | AsiVamosMarcaSheet | ComercialSheet | CarteraSheet | EmptySheet
 
 /* ------------------------------------------------------------------ */
 /* Hoja tipo ASI VAMOS (resumen por asesor comercial)                 */
@@ -432,7 +478,7 @@ export interface ParsedWorkbook {
  * - pair:   la misma hoja en Documento 1 vs Documento 2
  */
 export type Report =
-  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet }
+  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet | CarteraSheet }
   | { id: string; mode: 'pair'; title: string; a: MatrixSheet | FlatSheet; b: MatrixSheet | FlatSheet }
 
 export type InsightType = 'hallazgo' | 'riesgo' | 'oportunidad' | 'calidad'

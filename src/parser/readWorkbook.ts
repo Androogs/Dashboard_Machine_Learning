@@ -65,8 +65,8 @@ function toCell(cell: XLSXns.CellObject | undefined, date1904: boolean): Cell {
 }
 
 export interface ReadOptions {
-  /** Hojas que no se procesan (se devuelven vacías con skipped = true) */
-  skip?: (name: string) => boolean
+  /** Hojas que no se procesan (se devuelven vacías con skipped = true). Recibe también la lista completa de nombres. */
+  skip?: (name: string, all: string[]) => boolean
 }
 
 export interface RawSheetResult extends RawSheet {
@@ -76,7 +76,7 @@ export interface RawSheetResult extends RawSheet {
 export function readWorkbook(buf: ArrayBuffer, opts: ReadOptions = {}): RawSheetResult[] {
   // 1.ª pasada (rápida): solo nombres de hojas, para decidir cuáles leer
   const names = XLSX.read(buf, { type: 'array', bookSheets: true }).SheetNames
-  const wanted = names.filter((n) => !opts.skip?.(n))
+  const wanted = names.filter((n) => !opts.skip?.(n, names))
   const wb = XLSX.read(buf, {
     type: 'array',
     sheets: wanted,

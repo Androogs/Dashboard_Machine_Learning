@@ -30,7 +30,7 @@ export function groupBySheet(reports: Report[]): SheetEntry[] {
     let entry = out.find((e) => e.id === key)
     if (!entry) {
       const raw = s.sheetName ?? s.name
-      const title = s.kind === 'runt' || s.kind === 'pivot' || s.kind === 'comercial' ? s.title : isGeneric(raw) ? r.title : raw
+      const title = s.kind === 'runt' || s.kind === 'pivot' || s.kind === 'comercial' || s.kind === 'cartera' ? s.title : isGeneric(raw) ? r.title : raw
       entry = { id: key, title, docIndex: s.docIndex, fileName: s.fileName, tables: [] }
       out.push(entry)
     }
@@ -45,7 +45,9 @@ export function groupBySheet(reports: Report[]): SheetEntry[] {
             ? 'Resumen'
             : s.kind === 'asivamosConsolidado'
               ? 'Consolidado Marcas'
-              : 'Mercado'
+              : s.kind === 'cartera'
+                ? 'Cartera'
+                : 'Mercado'
     entry.tables.push({ id: r.id, label: `Por ${label.toLowerCase()}`, report: r })
   }
   return out.sort((a, b) => a.docIndex - b.docIndex)

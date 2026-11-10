@@ -1,15 +1,16 @@
-import type { AsiVamosConsolidadoSheet, AsiVamosSheet, ComercialCount, ComercialSheet, FlatSheet, MatrixSheet, PivotSheet, Report, RuntSheet } from '@/types/report'
+import type { AsiVamosConsolidadoSheet, AsiVamosSheet, CarteraRow, CarteraSheet, ComercialCount, ComercialSheet, FlatSheet, MatrixSheet, PivotSheet, Report, RuntSheet } from '@/types/report'
 import { computeFlat, defaultFlatConfig, dimensions, measures } from '@/analysis/flat'
 import { computeFlatPair, computeMatrixPair } from '@/analysis/compare'
 import { buildEnv, defaultEnvConfig, topGrowth } from '@/analysis/env'
 import { defaultMatrixConfig } from '@/analysis/matrix'
-import { fmtInt, fmtPct, fmtVar, variation } from '@/lib/format'
+import { FINANCIERAS } from '@/parser/carteraParser'
+import { fmtCOPCompact, fmtInt, fmtPct, fmtVar, shortLabel, variation } from '@/lib/format'
 import { flatFormat } from '@/analysis/flatFormat'
 import { valueFormat } from '@/lib/units'
 import { COLOR_COMPARACION } from '@/config/negocio'
 import logoUrl from '@/assets/logo-sumoto.png?inline'
 
-type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet
+type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet | CarteraSheet
 type TableRow = Array<string | number | null>
 
 /** Franjas de color de los KPIs (mismo sistema que el dashboard). */
@@ -304,7 +305,50 @@ function singleReport(sheet: SingleSheet): string {
   if (sheet.kind === 'asivamos') return asivamosReport(sheet)
   if (sheet.kind === 'asivamosConsolidado') return asivamosConsolidadoReport(sheet)
   if (sheet.kind === 'comercial') return comercialReport(sheet)
+  if (sheet.kind === 'cartera') return carteraReport(sheet)
   return runtReport(sheet)
+}
+
+/** Corte de cartera: saldos por financiera, motos y repuestos por bodega/asesor, campaña YO SOY. */
+function carteraReport(sheet: CarteraSheet): string {
+  const sum = (l: CarteraRow[]) => l.reduce((a, r) => a + r.saldo, 0)
+  const motos = sheet.rows.filter((r) => r.grupo === 'MT')
+  const repuestos = sheet.rows.filter((r) => r.grupo === 'RP')
+  const yoSoy = sheet.rows.filter((r) => r.yoSoy)
+  const total = sum(sheet.rows)
+  const byKey = (l: CarteraRow[], k: 'bodega' | 'vendedor') => {
+    const m = new Map<string, { n: number; saldo: number }>()
+    for (const r of l) {
+      const cur = m.get(r[k]) ?? { n: 0, saldo: 0 }
+      cur.n++
+      cur.saldo += r.saldo
+      m.set(r[k], cur)
+    }
+    return [...m.entries()].sort((a, b) => b[1].saldo - a[1].saldo)
+  }
+  const fin = FINANCIERAS.map((f) => {
+    const l = sheet.rows.filter((r) => r.financiera === f)
+    return [f, fmtInt(l.length), fmtCOPCompact(sum(l)), total ? fmtPct(sum(l) / total) : '—'] as TableRow
+  })
+  const propia = sheet.rows.filter((r) => r.financiera === null)
+  fin.push(['Cartera propia / otras', fmtInt(propia.length), fmtCOPCompact(sum(propia)), total ? fmtPct(sum(propia) / total) : '—'])
+  const section = (title: string, l: CarteraRow[]) =>
+    `<h3 class="subtitle">${escapeHtml(title)} — ${fmtInt(l.length)} documentos, ${fmtCOPCompact(sum(l))}</h3>` +
+    barChart(byKey(l, 'bodega').slice(0, 14).map(([b, v]) => ({ label: shortLabel(b), value: v.saldo, display: fmtCOPCompact(v.saldo) })), `Saldo por bodega — ${title}`) +
+    table(['Asesor', 'Documentos', 'Saldo'], byKey(l, 'vendedor').map(([a, v]) => [a, fmtInt(v.n), fmtCOPCompact(v.saldo)]), `Saldo por asesor — ${title}`)
+  return [
+    kpis([
+      { label: 'Saldo total de cartera', value: fmtCOPCompact(total), detail: `${fmtInt(sheet.rows.length)} documentos`, tone: 'blue' },
+      { label: 'Motos (MT)', value: fmtCOPCompact(sum(motos)), detail: `${fmtInt(motos.length)} documentos`, tone: 'green' },
+      { label: 'Repuestos (RP)', value: fmtCOPCompact(sum(repuestos)), detail: `${fmtInt(repuestos.length)} documentos`, tone: 'amber' },
+      { label: 'Negocios YO SOY', value: fmtInt(yoSoy.length), detail: `saldo ${fmtCOPCompact(sum(yoSoy))}`, tone: 'coral' },
+    ]),
+    barChart(fin.map((f) => ({ label: String(f[0]), value: sheet.rows.filter((r) => (f[0] === 'Cartera propia / otras' ? r.financiera === null : r.financiera === f[0])).reduce((a, r) => a + r.saldo, 0), display: String(f[2]) })), 'Saldo por financiera'),
+    table(['Financiera', 'Documentos', 'Saldo', 'Participación'], fin, 'Saldos por financiera'),
+    section('Motos (MT)', motos),
+    section('Repuestos (RP)', repuestos),
+    table(['Documento', 'Cliente', 'Bodega', 'Asesor', 'Saldo'], yoSoy.sort((a, b) => b.saldo - a.saldo).map((r) => [`${r.prefijo} ${r.numero ?? ''}`.trim(), r.cliente, shortLabel(r.bodega), r.vendedor, fmtCOPCompact(r.saldo)]), 'Negocios pendientes campaña YO SOY'),
+  ].join('')
 }
 
 /** Tablero comercial (Así vamos compilado): KPIs, resumen por marca o sede y tablas por asesor. */

@@ -10,6 +10,7 @@ import { HOJAS_CONFIDENCIALES, HOJAS_NO_PROCESAR } from '@/config/negocio'
 import { parseBudgetExecutionWorkbook } from './budgetExecutionParser'
 import { consolidateAsiVamosMarcaSheets } from './asivamosConsolidadoParser'
 import { parseComercialWorkbook } from './comercialParser'
+import { CARTERA_AUX, parseCarteraWorkbook } from './carteraParser'
 import { norm } from '@/lib/format'
 
 export { parseRawSheet }
@@ -19,7 +20,12 @@ export type ProgressFn = (step: string, pct: number) => void
 export function parseWorkbook(buf: ArrayBuffer, docIndex: number, fileName: string, onProgress?: ProgressFn): ParsedWorkbook {
   const t0 = Date.now()
   onProgress?.('Leyendo hojas del archivo', 15)
-  const raws = readWorkbook(buf, { skip: (n) => HOJAS_NO_PROCESAR.test(n) })
+  // En un libro "TODO CORTE …" las pestañas auxiliares (MT, RP, Z, YO SOY, RECOBRO AKT, Sheet)
+  // son subconjuntos de TODO o vienen vacías; se omiten porque una puede superar el millón de filas.
+  const raws = readWorkbook(buf, {
+    skip: (n, all) =>
+      HOJAS_NO_PROCESAR.test(n) || (all.some((x) => norm(x) === 'todo') && CARTERA_AUX.test(n.trim()) && norm(n) !== 'todo'),
+  })
   const budgetReports = parseBudgetExecutionWorkbook(raws, { docIndex, fileName })
   if (budgetReports) {
     onProgress?.('Interpretando tablas de ejecución presupuestal', 80)
@@ -63,6 +69,15 @@ export function parseWorkbook(buf: ArrayBuffer, docIndex: number, fileName: stri
     const rest = sheets.filter((s) => !consumed.has(norm(('sheetName' in s && s.sheetName) || s.name)))
     sheets.length = 0
     sheets.push(...comercial.sheets, ...rest)
+  }
+  // Libro "TODO CORTE …" (cartera con saldo por documento): se arma el tablero de cartera
+  // y se absorben la hoja fuente y las pestañas auxiliares con la misma estructura.
+  const cartera = parseCarteraWorkbook(raws, { docIndex, fileName })
+  if (cartera) {
+    const consumed = new Set(cartera.consumed.map((n) => norm(n)))
+    const rest = sheets.filter((s) => !consumed.has(norm(('sheetName' in s && s.sheetName) || s.name)))
+    sheets.length = 0
+    sheets.push(...cartera.sheets, ...rest)
   }
   return { docIndex, fileName, fileSize: buf.byteLength, sheets, parseMs: Date.now() - t0 }
 }
