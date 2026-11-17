@@ -356,7 +356,56 @@ export interface CarteraSheet {
   notes: string[]
 }
 
-export type ParsedSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | AsiVamosMarcaSheet | ComercialSheet | CarteraSheet | EmptySheet
+/* ------------------------------------------------------------------ */
+/* Ventas de motos (base "Ventas mes" del DMS: una fila por unidad)     */
+/* ------------------------------------------------------------------ */
+
+/** Forma de pago resumida a partir de cond_pago. */
+export type FormaPago = 'Contado' | 'Crédito' | 'Sin dato'
+
+export interface VentaRow {
+  factura: number | null
+  numero: number | null
+  /** ms UTC o null */
+  fecha: number | null
+  /** Prefijo del tipo de documento: MTE1, NCC, NCD… */
+  tipo: string
+  /** Tipo de documento completo ("MTE2 - FACTURAS DE VENTA DE MOTOS …") */
+  tipoDoc: string
+  bodega: string
+  /** Asesor / vendedor */
+  vendedor: string
+  cliente: string
+  vin: string
+  modelo: string
+  /** Marca canonizada desde subgrupo: Suzuki, AKT, Hero… */
+  marca: string
+  /** Precio + IVA con signo (las devoluciones son negativas) */
+  precio: number
+  utilidad: number | null
+  /** Unidades con signo (devoluciones −1) */
+  cant: number
+  devolucion: boolean
+  pago: FormaPago
+}
+
+export interface VentasSheet {
+  kind: 'ventas'
+  id: string
+  name: string
+  sheetName?: string
+  docIndex: number
+  fileName: string
+  title: string
+  /** Fecha de generación leída del preámbulo (ej: "17 de noviembre de 2026") */
+  generatedAt: string | null
+  /** Periodo de las ventas: "octubre 2026" o "oct–nov 2026" */
+  periodo: string
+  rows: VentaRow[]
+  notes: string[]
+}
+
+export type ParsedSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | AsiVamosMarcaSheet | ComercialSheet | CarteraSheet | VentasSheet | EmptySheet
 
 /* ------------------------------------------------------------------ */
 /* Hoja tipo ASI VAMOS (resumen por asesor comercial)                 */
@@ -478,7 +527,7 @@ export interface ParsedWorkbook {
  * - pair:   la misma hoja en Documento 1 vs Documento 2
  */
 export type Report =
-  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet | CarteraSheet }
+  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet | CarteraSheet | VentasSheet }
   | { id: string; mode: 'pair'; title: string; a: MatrixSheet | FlatSheet; b: MatrixSheet | FlatSheet }
 
 export type InsightType = 'hallazgo' | 'riesgo' | 'oportunidad' | 'calidad'

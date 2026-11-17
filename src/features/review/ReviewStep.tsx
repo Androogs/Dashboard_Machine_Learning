@@ -29,6 +29,11 @@ function describe(s: ParsedSheet): string {
   }
   if (s.kind === 'comercial') return `Por ${s.groupBy}: ${s.asiVamos.length} asesores en Así vamos; ${s.checks.map((c) => `${c.label.toLowerCase()} ${c.calculado.toLocaleString('es-CO')}`).join(', ')}.`
   if (s.kind === 'cartera') return `${fmtInt(s.rows.length)} documentos de cartera (motos, repuestos, financieras y campaña YO SOY).`
+  if (s.kind === 'ventas') {
+    const marcas = new Set(s.rows.map((r) => r.marca)).size
+    const netas = s.rows.reduce((a, r) => a + r.cant, 0)
+    return `${fmtInt(s.rows.length)} registros de ${s.periodo || 'ventas'}: ${fmtInt(netas)} motos netas en ${marcas} marcas.`
+  }
   if (s.kind === 'asivamos') return `${s.rows.length} asesores, corte mes ${s.meta.mes ?? '—'}.`
   if (s.kind === 'asivamosConsolidado') return `${s.brands.length} marca(s), ${s.brands.map((b) => `${b}: ${s.brandData[b].length}`).join(', ')}.`
   if ((s.kind as string) === 'asivamosMarca') return `${(s as AsiVamosMarcaSheet).rows.length} asesores de la marca ${(s as AsiVamosMarcaSheet).brand}.`
@@ -58,6 +63,8 @@ const kindOf = (s: ParsedSheet) =>
               ? { label: 'Tablero comercial', Icon: BarChart3 }
               : s.kind === 'cartera'
                 ? { label: 'Corte de cartera', Icon: BarChart3 }
+              : s.kind === 'ventas'
+                ? { label: 'Venta de motos', Icon: BarChart3 }
             : (s.kind as string) === 'asivamosMarca'
               ? { label: `Marca ${(s as AsiVamosMarcaSheet).brand}`, Icon: BarChart3 }
               : s.kind === 'matrix'

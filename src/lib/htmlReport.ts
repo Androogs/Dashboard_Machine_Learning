@@ -1,4 +1,4 @@
-import type { AsiVamosConsolidadoSheet, AsiVamosSheet, CarteraRow, CarteraSheet, ComercialCount, ComercialSheet, FlatSheet, MatrixSheet, PivotSheet, Report, RuntSheet } from '@/types/report'
+import type { AsiVamosConsolidadoSheet, AsiVamosSheet, CarteraRow, CarteraSheet, ComercialCount, ComercialSheet, FlatSheet, MatrixSheet, PivotSheet, Report, RuntSheet, VentaRow, VentasSheet } from '@/types/report'
 import { computeFlat, defaultFlatConfig, dimensions, measures } from '@/analysis/flat'
 import { computeFlatPair, computeMatrixPair } from '@/analysis/compare'
 import { buildEnv, defaultEnvConfig, topGrowth } from '@/analysis/env'
@@ -10,7 +10,7 @@ import { valueFormat } from '@/lib/units'
 import { COLOR_COMPARACION } from '@/config/negocio'
 import logoUrl from '@/assets/logo-sumoto.png?inline'
 
-type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet | CarteraSheet
+type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet | CarteraSheet | VentasSheet
 type TableRow = Array<string | number | null>
 
 /** Franjas de color de los KPIs (mismo sistema que el dashboard). */
@@ -306,7 +306,60 @@ function singleReport(sheet: SingleSheet): string {
   if (sheet.kind === 'asivamosConsolidado') return asivamosConsolidadoReport(sheet)
   if (sheet.kind === 'comercial') return comercialReport(sheet)
   if (sheet.kind === 'cartera') return carteraReport(sheet)
+  if (sheet.kind === 'ventas') return ventasReport(sheet)
   return runtReport(sheet)
+}
+
+/** Ventas mes: unidades netas y venta por marca, punto de venta y asesor. */
+function ventasReport(sheet: VentasSheet): string {
+  const motos = (l: VentaRow[]) => l.reduce((a, r) => a + r.cant, 0)
+  const venta = (l: VentaRow[]) => l.reduce((a, r) => a + r.precio, 0)
+  const uti = (l: VentaRow[]) => l.reduce((a, r) => a + (r.utilidad ?? 0), 0)
+  const byKey = (l: VentaRow[], k: 'marca' | 'bodega' | 'vendedor' | 'modelo') => {
+    const m = new Map<string, { facturadas: number; devs: number; motos: number; venta: number; utilidad: number }>()
+    for (const r of l) {
+      const cur = m.get(r[k]) ?? { facturadas: 0, devs: 0, motos: 0, venta: 0, utilidad: 0 }
+      if (r.devolucion) cur.devs += Math.abs(r.cant)
+      else cur.facturadas += r.cant
+      cur.motos += r.cant
+      cur.venta += r.precio
+      cur.utilidad += r.utilidad ?? 0
+      m.set(r[k], cur)
+    }
+    return [...m.entries()].sort((a, b) => b[1].venta - a[1].venta)
+  }
+  const totalV = venta(sheet.rows)
+  const totalU = uti(sheet.rows)
+  const facturadas = sheet.rows.filter((r) => !r.devolucion).reduce((a, r) => a + r.cant, 0)
+  const devs = sheet.rows.filter((r) => r.devolucion).reduce((a, r) => a + Math.abs(r.cant), 0)
+  const dimTable = (title: string, k: 'marca' | 'bodega' | 'vendedor' | 'modelo', short = false) =>
+    table(
+      [title, 'Facturadas', 'Devol.', 'A hoy', 'Venta neta', 'Utilidad', 'Part. %'],
+      byKey(sheet.rows, k).map(([label, v]) => [
+        short ? shortLabel(label) : label,
+        fmtInt(v.facturadas),
+        v.devs ? fmtInt(v.devs) : '—',
+        fmtInt(v.motos),
+        fmtCOPCompact(v.venta),
+        fmtCOPCompact(v.utilidad),
+        totalV ? fmtPct(v.venta / totalV) : '—',
+      ]),
+      `${title} — ${sheet.periodo || 'ventas del mes'}`,
+      '* A hoy = unidades facturadas menos devoluciones (notas crédito).',
+    )
+  return [
+    kpis([
+      { label: 'Motos a hoy', value: fmtInt(motos(sheet.rows)), detail: `${fmtInt(facturadas)} facturadas · ${fmtInt(devs)} devoluciones`, tone: 'blue' },
+      { label: 'Venta neta', value: fmtCOPCompact(totalV), detail: sheet.periodo ? `Corte a ${sheet.periodo}` : '', tone: 'green' },
+      { label: 'Utilidad', value: fmtCOPCompact(totalU), detail: totalV ? `margen ${fmtPct(totalU / totalV)}` : '', tone: 'amber' },
+      { label: 'Ticket promedio', value: fmtCOPCompact(motos(sheet.rows) ? totalV / motos(sheet.rows) : 0), detail: 'Venta neta ÷ motos', tone: 'coral' },
+    ]),
+    barChart(byKey(sheet.rows, 'marca').map(([label, v]) => ({ label, value: v.motos, display: `${fmtInt(v.motos)} motos` })), 'Motos vendidas por marca'),
+    barChart(byKey(sheet.rows, 'bodega').slice(0, 14).map(([label, v]) => ({ label: shortLabel(label), value: v.venta, display: fmtCOPCompact(v.venta) })), 'Venta neta por punto de venta'),
+    dimTable('Marca', 'marca'),
+    dimTable('Punto de venta', 'bodega', true),
+    dimTable('Asesor', 'vendedor'),
+  ].join('')
 }
 
 /** Corte de cartera: saldos por financiera, motos y repuestos por bodega/asesor, campaña YO SOY. */

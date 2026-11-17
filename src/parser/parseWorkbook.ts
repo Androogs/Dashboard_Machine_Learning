@@ -11,6 +11,7 @@ import { parseBudgetExecutionWorkbook } from './budgetExecutionParser'
 import { consolidateAsiVamosMarcaSheets } from './asivamosConsolidadoParser'
 import { parseComercialWorkbook } from './comercialParser'
 import { CARTERA_AUX, parseCarteraWorkbook } from './carteraParser'
+import { parseVentasWorkbook } from './ventasParser'
 import { norm } from '@/lib/format'
 
 export { parseRawSheet }
@@ -78,6 +79,15 @@ export function parseWorkbook(buf: ArrayBuffer, docIndex: number, fileName: stri
     const rest = sheets.filter((s) => !consumed.has(norm(('sheetName' in s && s.sheetName) || s.name)))
     sheets.length = 0
     sheets.push(...cartera.sheets, ...rest)
+  }
+  // Base "Ventas mes" del DMS (Grd_*.xlsx): una fila por unidad vendida.
+  // Reemplaza a la lectura plana de la hoja para presentarla como reporte de ventas.
+  const ventas = parseVentasWorkbook(raws, { docIndex, fileName })
+  if (ventas) {
+    const consumed = new Set(ventas.consumed.map((n) => norm(n)))
+    const rest = sheets.filter((s) => !consumed.has(norm(('sheetName' in s && s.sheetName) || s.name)))
+    sheets.length = 0
+    sheets.push(...ventas.sheets, ...rest)
   }
   return { docIndex, fileName, fileSize: buf.byteLength, sheets, parseMs: Date.now() - t0 }
 }
