@@ -21,6 +21,7 @@ import { AsiVamosConsolidadoReport } from './AsiVamosConsolidadoReport'
 import { ComercialReport } from './comercial/ComercialReport'
 import { CarteraReport } from './cartera/CarteraReport'
 import { VentasReport } from './ventas/VentasReport'
+import { GerenciaCarteraReport } from './cartera/GerenciaCarteraReport'
 import { cn } from '@/lib/utils'
 import { downloadHtmlReport } from '@/lib/htmlReport'
 
@@ -34,6 +35,7 @@ function ReportView({ report, title }: { report: Report; title: string }) {
     if (s.kind === 'comercial') return <ComercialReport key={report.id} sheet={s} />
     if (s.kind === 'cartera') return <CarteraReport key={report.id} sheet={s} />
     if (s.kind === 'ventas') return <VentasReport key={report.id} sheet={s} />
+    if (s.kind === 'gerenciaCartera') return <GerenciaCarteraReport key={report.id} sheet={s} />
     if (s.kind === 'matrix') return <EnvReport key={report.id} sheet={s} title={title} />
     return <FlatReport key={report.id} sheet={s} title={title} />
   }

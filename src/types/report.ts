@@ -405,7 +405,99 @@ export interface VentasSheet {
   notes: string[]
 }
 
-export type ParsedSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | AsiVamosMarcaSheet | ComercialSheet | CarteraSheet | VentasSheet | EmptySheet
+/* ------------------------------------------------------------------ */
+/* Informe de gerencia de cartera (libro "INFORME GERENCIA - CIERRE    */
+/* DE MES CARTERA": base de cuotas con envejecimiento + comparativos)  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Sección de la cartera según el "Tipo 2" curado en el libro:
+ * - fin:       desembolsos de financieras (ZAD, ZK, ZD, ZE, ZG, ZH, ZS, ZC, ZI, ZL)
+ * - cont:      contados e iniciales (MTE)
+ * - contab:    documentos de contabilidad (90 CONTABILIDAD)
+ * - analizada: cartera a analizar (propia diferida, avalada, repuestos, seguros,
+ *              traslados a propia, cargos) — el universo de las tablas dinámicas
+ * - ajuste:    recibos de caja y notas (saldo negativo: son aplicaciones, no deuda)
+ */
+export type GCSec = 'fin' | 'cont' | 'contab' | 'analizada' | 'ajuste'
+
+/** Fila agregada por combinación de dimensiones (la base llega a ~74 mil cuotas). */
+export interface GCRow {
+  sec: GCSec
+  /** Bodega cruda ("101 - CL 30 33 80 ALMACEN PRINCIPAL") */
+  bod: string
+  /** z.cartera ("01 SUZUKI PPAL") */
+  zona: string
+  /** t.cartera ("001 CORRIENTE") */
+  tc: string
+  /** Cobrador ("15 AUX CARTERA 1") */
+  cob: string
+  /** Cartera Por Financera (grupo financiero curado; '' si no aplica) */
+  cpf: string
+  /** Tipo 2 (grupo de documento curado) */
+  t2: string
+  /** Cuotas (filas originales) en la combinación */
+  n: number
+  /** saldo_capital */
+  sal: number
+  /** saldo_a_corte */
+  corte: number
+  /** Sin vencer */
+  sv: number
+  /** Buckets de mora: [1-30, 31-60, 61-90, 91-120, 121-180, 181-360, +360] */
+  b: number[]
+}
+
+/** Un periodo de un bloque comparativo (ej: Oct 2026 dentro de SEPT-OCT). */
+export interface GCPeriodo {
+  /** Etiqueta legible ("Oct 2026") */
+  label: string
+  morosidad: number | null
+  saldo: number
+  sv: number
+  moroso: number
+  /** Buckets [1-30, 31-60, 61-90, 91-120, 121-180, 181-360, +360] */
+  b: number[]
+}
+
+/** Bloque de la hoja comparativa ("Cartera general", "Cartera corriente", cobrador…) */
+export interface GCBloque {
+  title: string
+  periodos: GCPeriodo[]
+}
+
+/** Documento destacado (top por saldo) para la tabla de detalle. */
+export interface GCTopDoc {
+  cliente: string
+  nit: string
+  bod: string
+  t2: string
+  tc: string
+  cob: string
+  sal: number
+  moroso: number
+}
+
+export interface GerenciaCarteraSheet {
+  kind: 'gerenciaCartera'
+  id: string
+  name: string
+  sheetName?: string
+  docIndex: number
+  fileName: string
+  title: string
+  /** Periodo del cierre ("octubre 2026") */
+  periodo: string
+  rows: GCRow[]
+  topDocs: GCTopDoc[]
+  /** Bloques del comparativo mensual (ej: sept vs oct) */
+  mensual: GCBloque[]
+  /** Bloques del comparativo anual (ej: oct año anterior vs oct actual) */
+  anual: GCBloque[]
+  notes: string[]
+}
+
+export type ParsedSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | AsiVamosMarcaSheet | ComercialSheet | CarteraSheet | VentasSheet | GerenciaCarteraSheet | EmptySheet
 
 /* ------------------------------------------------------------------ */
 /* Hoja tipo ASI VAMOS (resumen por asesor comercial)                 */
@@ -527,7 +619,7 @@ export interface ParsedWorkbook {
  * - pair:   la misma hoja en Documento 1 vs Documento 2
  */
 export type Report =
-  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet | CarteraSheet | VentasSheet }
+  | { id: string; mode: 'single'; title: string; sheet: MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet | CarteraSheet | VentasSheet | GerenciaCarteraSheet }
   | { id: string; mode: 'pair'; title: string; a: MatrixSheet | FlatSheet; b: MatrixSheet | FlatSheet }
 
 export type InsightType = 'hallazgo' | 'riesgo' | 'oportunidad' | 'calidad'

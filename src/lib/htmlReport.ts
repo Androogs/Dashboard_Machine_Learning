@@ -1,16 +1,17 @@
-import type { AsiVamosConsolidadoSheet, AsiVamosSheet, CarteraRow, CarteraSheet, ComercialCount, ComercialSheet, FlatSheet, MatrixSheet, PivotSheet, Report, RuntSheet, VentaRow, VentasSheet } from '@/types/report'
+import type { AsiVamosConsolidadoSheet, AsiVamosSheet, CarteraRow, CarteraSheet, ComercialCount, ComercialSheet, FlatSheet, GCRow, GerenciaCarteraSheet, MatrixSheet, PivotSheet, Report, RuntSheet, VentaRow, VentasSheet } from '@/types/report'
 import { computeFlat, defaultFlatConfig, dimensions, measures } from '@/analysis/flat'
 import { computeFlatPair, computeMatrixPair } from '@/analysis/compare'
 import { buildEnv, defaultEnvConfig, topGrowth } from '@/analysis/env'
 import { defaultMatrixConfig } from '@/analysis/matrix'
 import { FINANCIERAS } from '@/parser/carteraParser'
+import { gcFinanciera } from '@/parser/gerenciaCarteraParser'
 import { fmtCOPCompact, fmtInt, fmtPct, fmtVar, shortLabel, variation } from '@/lib/format'
 import { flatFormat } from '@/analysis/flatFormat'
 import { valueFormat } from '@/lib/units'
 import { COLOR_COMPARACION } from '@/config/negocio'
 import logoUrl from '@/assets/logo-sumoto.png?inline'
 
-type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet | CarteraSheet | VentasSheet
+type SingleSheet = MatrixSheet | FlatSheet | PivotSheet | RuntSheet | AsiVamosSheet | AsiVamosConsolidadoSheet | ComercialSheet | CarteraSheet | VentasSheet | GerenciaCarteraSheet
 type TableRow = Array<string | number | null>
 
 /** Franjas de color de los KPIs (mismo sistema que el dashboard). */
@@ -307,6 +308,7 @@ function singleReport(sheet: SingleSheet): string {
   if (sheet.kind === 'comercial') return comercialReport(sheet)
   if (sheet.kind === 'cartera') return carteraReport(sheet)
   if (sheet.kind === 'ventas') return ventasReport(sheet)
+  if (sheet.kind === 'gerenciaCartera') return gerenciaCarteraReport(sheet)
   return runtReport(sheet)
 }
 
@@ -401,6 +403,91 @@ function carteraReport(sheet: CarteraSheet): string {
     section('Motos (MT)', motos),
     section('Repuestos (RP)', repuestos),
     table(['Documento', 'Cliente', 'Bodega', 'Asesor', 'Saldo'], yoSoy.sort((a, b) => b.saldo - a.saldo).map((r) => [`${r.prefijo} ${r.numero ?? ''}`.trim(), r.cliente, shortLabel(r.bodega), r.vendedor, fmtCOPCompact(r.saldo)]), 'Negocios pendientes campaña YO SOY'),
+  ].join('')
+}
+
+/** Informe de gerencia de cartera: saldo vigente con envejecimiento, por sección, financiera, cobrador y comparativos. */
+function gerenciaCarteraReport(sheet: GerenciaCarteraSheet): string {
+  const mor = (r: GCRow) => r.b.reduce((a, x) => a + x, 0)
+  const debt = sheet.rows.filter((r) => r.sec !== 'ajuste')
+  const saldo = debt.reduce((a, r) => a + r.sal, 0)
+  const moroso = debt.reduce((a, r) => a + mor(r), 0)
+  const nDocs = debt.reduce((a, r) => a + r.n, 0)
+  const secSum = (sec: GCRow['sec']) => debt.filter((r) => r.sec === sec).reduce((a, r) => a + r.sal, 0)
+
+  const agg = (l: GCRow[], k: (r: GCRow) => string, short?: (s: string) => string) => {
+    const m = new Map<string, { label: string; short: string; n: number; sal: number; sv: number; mor: number }>()
+    for (const r of l) {
+      const key = k(r)
+      const cur = m.get(key) ?? { label: key, short: short?.(key) ?? key, n: 0, sal: 0, sv: 0, mor: 0 }
+      cur.n += r.n
+      cur.sal += r.sal
+      cur.sv += r.sv
+      cur.mor += mor(r)
+      m.set(key, cur)
+    }
+    return [...m.values()].sort((a, b) => b.sal - a.sal)
+  }
+
+  const aging = debt.reduce(
+    (a, r) => {
+      a.sv += r.sv
+      for (let i = 0; i < 7; i++) a.b[i]! += r.b[i]!
+      return a
+    },
+    { sv: 0, b: [0, 0, 0, 0, 0, 0, 0] },
+  )
+  const RANGOS = ['Sin vencer', '1-30', '31-60', '61-90', '91-120', '121-180', '181-360', '+360']
+
+  const finLabel = (r: GCRow) => (r.sec === 'cont' ? 'Contados e iniciales' : r.sec === 'contab' ? 'Contabilidad' : gcFinanciera(r.t2, r.cpf))
+  const porFin = agg(debt, finLabel)
+  const porTC = agg(debt, (r) => r.tc, (s) => s.replace(/^\d+\s*-?\s*/, ''))
+  const porCob = agg(debt.filter((r) => r.sec === 'analizada'), (r) => r.cob, (s) => s.replace(/^\d+\s*-?\s*/, ''))
+  const porBod = agg(debt, (r) => r.bod, shortLabel)
+
+  const secRows: TableRow[] = [
+    ['Cartera analizada', fmtInt(debt.filter((r) => r.sec === 'analizada').reduce((a, r) => a + r.n, 0)), fmtCOPCompact(secSum('analizada')), saldo ? fmtPct(secSum('analizada') / saldo) : '—'],
+    ['Desembolsos financieras', fmtInt(debt.filter((r) => r.sec === 'fin').reduce((a, r) => a + r.n, 0)), fmtCOPCompact(secSum('fin')), saldo ? fmtPct(secSum('fin') / saldo) : '—'],
+    ['Contados e iniciales', fmtInt(debt.filter((r) => r.sec === 'cont').reduce((a, r) => a + r.n, 0)), fmtCOPCompact(secSum('cont')), saldo ? fmtPct(secSum('cont') / saldo) : '—'],
+    ['Contabilidad', fmtInt(debt.filter((r) => r.sec === 'contab').reduce((a, r) => a + r.n, 0)), fmtCOPCompact(secSum('contab')), saldo ? fmtPct(secSum('contab') / saldo) : '—'],
+  ]
+
+  const compSection = (title: string, bloques: GerenciaCarteraSheet['mensual']) => {
+    const general = bloques[0]
+    if (!general) return ''
+    const [prev, cur] = general.periodos.length === 1 ? [null, general.periodos[0]!] : [general.periodos[0]!, general.periodos[general.periodos.length - 1]!]
+    const rows: TableRow[] = [
+      ['Saldo', prev ? fmtCOPCompact(prev.saldo) : '—', fmtCOPCompact(cur.saldo), prev ? fmtVar((cur.saldo - prev.saldo) / Math.abs(prev.saldo || 1)) : '—'],
+      ['Sin vencer', prev ? fmtCOPCompact(prev.sv) : '—', fmtCOPCompact(cur.sv), prev ? fmtVar((cur.sv - prev.sv) / Math.abs(prev.sv || 1)) : '—'],
+      ['Moroso', prev ? fmtCOPCompact(prev.moroso) : '—', fmtCOPCompact(cur.moroso), prev ? fmtVar((cur.moroso - prev.moroso) / Math.abs(prev.moroso || 1)) : '—'],
+      ['% morosidad', prev?.morosidad != null ? fmtPct(prev.morosidad) : '—', cur.morosidad != null ? fmtPct(cur.morosidad) : '—', ''],
+    ]
+    const small = bloques.slice(1).map((b) => {
+      const [p2, c2] = b.periodos.length === 1 ? [null, b.periodos[0]!] : [b.periodos[0]!, b.periodos[b.periodos.length - 1]!]
+      return [b.title, p2 ? fmtCOPCompact(p2.saldo) : '—', fmtCOPCompact(c2.saldo), p2 ? fmtVar((c2.saldo - p2.saldo) / Math.abs(p2.saldo || 1)) : '—', c2.saldo ? fmtPct(c2.moroso / c2.saldo) : '—'] as TableRow
+    })
+    return `<h3 class="subtitle">${escapeHtml(title)}</h3>` +
+      table(['Concepto', prev?.label ?? 'Anterior', cur.label, 'Var. %'], rows, `${title} — ${general.title}`) +
+      table(['Cartera', prev?.label ?? 'Anterior', cur.label, 'Var. saldo', '% mora'], small, `Detalle ${title}`)
+  }
+
+  return [
+    kpis([
+      { label: 'Saldo cartera vigente', value: fmtCOPCompact(saldo), detail: `${fmtInt(nDocs)} cuotas (sin recibos ni notas)`, tone: 'blue' },
+      { label: 'Cartera analizada', value: fmtCOPCompact(secSum('analizada')), detail: 'Universo de las tablas dinámicas', tone: 'green' },
+      { label: 'Moroso', value: fmtCOPCompact(moroso), detail: saldo ? `${fmtPct(moroso / saldo)} del saldo` : '', tone: 'amber' },
+      { label: 'Sin vencer', value: fmtCOPCompact(aging.sv), detail: saldo ? `${fmtPct(aging.sv / saldo)} del saldo` : '', tone: 'coral' },
+    ]),
+    barChart(RANGOS.map((label, i) => ({ label, value: i === 0 ? aging.sv : aging.b[i - 1]!, display: fmtCOPCompact(i === 0 ? aging.sv : aging.b[i - 1]!) })), 'Envejecimiento del saldo — sin vencer y rangos de mora'),
+    barChart(porFin.slice(0, 14).map((f) => ({ label: f.short, value: f.sal, display: fmtCOPCompact(f.sal) })), 'Saldo por financiera o grupo'),
+    table(['Sección', 'Cuotas', 'Saldo', 'Participación'], secRows, 'Composición de la cartera vigente', '* Los recibos de caja y notas se excluyen: son movimientos de aplicación, no deuda.'),
+    table(['Financiera / grupo', 'Cuotas', 'Saldo', 'Sin vencer', 'Moroso', '% mora', 'Part. %'], porFin.map((f) => [f.short, fmtInt(f.n), fmtCOPCompact(f.sal), fmtCOPCompact(f.sv), fmtCOPCompact(f.mor), f.sal ? fmtPct(f.mor / f.sal) : '—', saldo ? fmtPct(f.sal / saldo) : '—']), 'Saldos por financiera'),
+    table(['Tipo de cartera', 'Cuotas', 'Saldo', 'Moroso', '% mora'], porTC.map((f) => [f.short, fmtInt(f.n), fmtCOPCompact(f.sal), fmtCOPCompact(f.mor), f.sal ? fmtPct(f.mor / f.sal) : '—']), 'Saldo por tipo de cartera'),
+    table(['Cobrador (cartera analizada)', 'Cuotas', 'Saldo', 'Moroso', '% mora'], porCob.map((f) => [f.short, fmtInt(f.n), fmtCOPCompact(f.sal), fmtCOPCompact(f.mor), f.sal ? fmtPct(f.mor / f.sal) : '—']), 'Saldo por cobrador'),
+    table(['Bodega / sede', 'Cuotas', 'Saldo', 'Moroso', '% mora'], porBod.map((f) => [f.short, fmtInt(f.n), fmtCOPCompact(f.sal), fmtCOPCompact(f.mor), f.sal ? fmtPct(f.mor / f.sal) : '—']), 'Saldo por bodega o sede'),
+    compSection('Comparativo mensual', sheet.mensual),
+    compSection('Comparativo anual', sheet.anual),
+    table(['Cliente', 'NIT', 'Documento', 'Bodega', 'Saldo', 'Moroso'], sheet.topDocs.map((d) => [d.cliente, d.nit, d.t2, shortLabel(d.bod), fmtCOPCompact(d.sal), fmtCOPCompact(d.moroso)]), 'Documentos de mayor saldo'),
   ].join('')
 }
 

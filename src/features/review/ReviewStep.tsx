@@ -34,6 +34,10 @@ function describe(s: ParsedSheet): string {
     const netas = s.rows.reduce((a, r) => a + r.cant, 0)
     return `${fmtInt(s.rows.length)} registros de ${s.periodo || 'ventas'}: ${fmtInt(netas)} motos netas en ${marcas} marcas.`
   }
+  if (s.kind === 'gerenciaCartera') {
+    const n = s.rows.reduce((a, r) => a + r.n, 0)
+    return `Cierre de cartera ${s.periodo || ''}: ${fmtInt(n)} cuotas con envejecimiento, ${fmtInt(s.mensual.length + s.anual.length)} comparativos.`
+  }
   if (s.kind === 'asivamos') return `${s.rows.length} asesores, corte mes ${s.meta.mes ?? '—'}.`
   if (s.kind === 'asivamosConsolidado') return `${s.brands.length} marca(s), ${s.brands.map((b) => `${b}: ${s.brandData[b].length}`).join(', ')}.`
   if ((s.kind as string) === 'asivamosMarca') return `${(s as AsiVamosMarcaSheet).rows.length} asesores de la marca ${(s as AsiVamosMarcaSheet).brand}.`
@@ -65,6 +69,8 @@ const kindOf = (s: ParsedSheet) =>
                 ? { label: 'Corte de cartera', Icon: BarChart3 }
               : s.kind === 'ventas'
                 ? { label: 'Venta de motos', Icon: BarChart3 }
+              : s.kind === 'gerenciaCartera'
+                ? { label: 'Cierre de cartera', Icon: BarChart3 }
             : (s.kind as string) === 'asivamosMarca'
               ? { label: `Marca ${(s as AsiVamosMarcaSheet).brand}`, Icon: BarChart3 }
               : s.kind === 'matrix'

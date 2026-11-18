@@ -11,6 +11,7 @@ import { parseBudgetExecutionWorkbook } from './budgetExecutionParser'
 import { consolidateAsiVamosMarcaSheets } from './asivamosConsolidadoParser'
 import { parseComercialWorkbook } from './comercialParser'
 import { CARTERA_AUX, parseCarteraWorkbook } from './carteraParser'
+import { GC_KEEP, isGerenciaCarteraBook, parseGerenciaCarteraWorkbook } from './gerenciaCarteraParser'
 import { parseVentasWorkbook } from './ventasParser'
 import { norm } from '@/lib/format'
 
@@ -24,8 +25,14 @@ export function parseWorkbook(buf: ArrayBuffer, docIndex: number, fileName: stri
   // En un libro "TODO CORTE …" las pestañas auxiliares (MT, RP, Z, YO SOY, RECOBRO AKT, Sheet)
   // son subconjuntos de TODO o vienen vacías; se omiten porque una puede superar el millón de filas.
   const raws = readWorkbook(buf, {
-    skip: (n, all) =>
-      HOJAS_NO_PROCESAR.test(n) || (all.some((x) => norm(x) === 'todo') && CARTERA_AUX.test(n.trim()) && norm(n) !== 'todo'),
+    skip: (n, all) => {
+      if (HOJAS_NO_PROCESAR.test(n)) return true
+      // Informe de gerencia de cartera: solo se leen la base "Sheet" y los comparativos;
+      // el resto de pestañas son pivots o ayudas del mismo informe.
+      if (isGerenciaCarteraBook(all)) return !GC_KEEP.test(n.trim())
+      // Libro "TODO CORTE …": se omiten las pestañas auxiliares (una puede superar el millón de filas).
+      return all.some((x) => norm(x) === 'todo') && CARTERA_AUX.test(n.trim()) && norm(n) !== 'todo'
+    },
   })
   const budgetReports = parseBudgetExecutionWorkbook(raws, { docIndex, fileName })
   if (budgetReports) {
@@ -79,6 +86,15 @@ export function parseWorkbook(buf: ArrayBuffer, docIndex: number, fileName: stri
     const rest = sheets.filter((s) => !consumed.has(norm(('sheetName' in s && s.sheetName) || s.name)))
     sheets.length = 0
     sheets.push(...cartera.sheets, ...rest)
+  }
+  // "INFORME GERENCIA - CIERRE DE MES CARTERA": base de cuotas con envejecimiento
+  // + comparativos mensual/anual. Todas las hojas del libro forman un solo reporte.
+  const gerencia = parseGerenciaCarteraWorkbook(raws, { docIndex, fileName })
+  if (gerencia) {
+    const consumed = new Set(gerencia.consumed.map((n) => norm(n)))
+    const rest = sheets.filter((s) => !consumed.has(norm(('sheetName' in s && s.sheetName) || s.name)))
+    sheets.length = 0
+    sheets.push(...gerencia.sheets, ...rest)
   }
   // Base "Ventas mes" del DMS (Grd_*.xlsx): una fila por unidad vendida.
   // Reemplaza a la lectura plana de la hoja para presentarla como reporte de ventas.
