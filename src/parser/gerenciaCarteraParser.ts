@@ -15,9 +15,10 @@
  *               FG/FJ, repuestos y servicios, seguros, traslados a propia, cargos)
  *  - ajuste:    recibos de caja y notas (saldo negativo: aplicaciones, no deuda)
  */
-import type { Cell, GCBloque, GCSec, GCTopDoc, GCRow, GCPeriodo, GerenciaCarteraSheet, RawSheet } from '@/types/report'
+import type { Cell, GCBloque, GCSec, GCSeg, GCSegTop, GCTopDoc, GCRow, GCPeriodo, GerenciaCarteraSheet, RawSheet } from '@/types/report'
 import { isExcelDate } from './cells'
 import { monthLong, monthShort, norm, titleCase } from '@/lib/format'
+import { SEGMENTOS_CARTERA } from '@/config/negocio'
 
 const S = (c: Cell): string => (c == null ? '' : isExcelDate(c) ? '' : String(c).replace(/\s+/g, ' ').trim())
 const N = (c: Cell): number => {
@@ -104,6 +105,19 @@ export function gcClaseDoc(t2: string): string {
   if (/otros ingresos|soat|servicios/.test(t)) return 'Otros servicios'
   return 'Otros'
 }
+
+/**
+ * Segmento del saldo moroso por responsable (vista "Segmentos"):
+ * A financieras (Ana), B contabilidad, C cajeras — SEGMENTOS_CARTERA en
+ * config/negocio. 'otros' si el código del Tipo 2 no cae en ninguna lista.
+ */
+export function gcSegmento(t2: string): GCSeg | 'otros' {
+  const code = norm(t2).match(/^[a-z0-9]+/)?.[0] ?? ''
+  return SEGMENTOS_CARTERA.find((s) => s.match.test(code))?.id ?? 'otros'
+}
+
+/** Código de documento (primer token del Tipo 2): "RPE10 - …" → "rpe10". */
+export const gcCodigo = (t2: string): string => norm(t2).match(/^[a-z0-9]+/)?.[0] ?? ''
 
 /* ---------------- Comparativos ---------------- */
 
@@ -205,6 +219,8 @@ export function parseGerenciaCarteraWorkbook(raws: RawSheet[], ctx: { docIndex: 
     topDocs.sort((a, b) => Math.abs(b.sal) - Math.abs(a.sal))
     if (topDocs.length > TOP_N) topDocs.pop()
   }
+  // Deudores por cobrador × segmento (vista "Segmentos"): cliente → moroso acumulado
+  const segTopMap = new Map<string, { seg: GCSeg; cob: string; docs: Map<string, GCTopDoc> }>()
   let nDocs = 0
 
   for (const row of raw.rows.slice(header.row + 1)) {
@@ -219,6 +235,7 @@ export function parseGerenciaCarteraWorkbook(raws: RawSheet[], ctx: { docIndex: 
     const cob = S(c(row, 'cobrador')) || 'Sin asignar'
     const cpf = S(c(row, 'cartera por financera'))
     const b = BUCKET_COLS.map((k) => N(c(row, k)))
+    const rowMor = b.reduce((a, x) => a + x, 0)
     const key = `${sec}|${bod}|${zona}|${tc}|${cob}|${cpf}|${t2}`
     const cur = combos.get(key) ?? { sec, bod: bod || 'Sin bodega', zona, tc, cob, cpf, t2, n: 0, sal: 0, corte: 0, sv: 0, b: [0, 0, 0, 0, 0, 0, 0] }
     cur.n++
@@ -236,13 +253,31 @@ export function parseGerenciaCarteraWorkbook(raws: RawSheet[], ctx: { docIndex: 
         tc,
         cob,
         sal,
-        moroso: b.reduce((a, x) => a + x, 0),
+        moroso: rowMor,
       })
+    }
+    if (sec === 'analizada' && rowMor > 0) {
+      const seg = gcSegmento(t2)
+      if (seg !== 'otros') {
+        const k = `${cob}|${seg}`
+        const grp = segTopMap.get(k) ?? { seg, cob, docs: new Map<string, GCTopDoc>() }
+        const cli = S(c(row, 'razon_social')) || 'Sin nombre'
+        const d = grp.docs.get(cli) ?? { cliente: cli, nit: S(c(row, 'nit')), bod: bod || 'Sin bodega', t2, tc, cob, sal: 0, moroso: 0 }
+        d.sal += sal
+        d.moroso += rowMor
+        grp.docs.set(cli, d)
+        segTopMap.set(k, grp)
+      }
     }
   }
   if (!combos.size) return null
 
   const rows = [...combos.values()]
+  const segTops: GCSegTop[] = [...segTopMap.values()].map((g) => ({
+    cob: g.cob,
+    seg: g.seg,
+    docs: [...g.docs.values()].sort((a, b) => b.moroso - a.moroso).slice(0, 10),
+  }))
   const find = (re: RegExp) => raws.find((r) => re.test(r.name.trim()))
   const mensual = parseComparativo(find(/^comparativo mensual/i))
   const anual = parseComparativo(find(/^comparativo anual/i))
@@ -278,6 +313,7 @@ export function parseGerenciaCarteraWorkbook(raws: RawSheet[], ctx: { docIndex: 
         periodo: periodo || lastSerialLabel || '',
         rows,
         topDocs,
+        segTops,
         mensual,
         anual,
         notes,

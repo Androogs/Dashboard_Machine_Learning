@@ -5,6 +5,7 @@ import { buildEnv, defaultEnvConfig, topGrowth } from '@/analysis/env'
 import { defaultMatrixConfig } from '@/analysis/matrix'
 import { FINANCIERAS } from '@/parser/carteraParser'
 import { gcFinanciera } from '@/parser/gerenciaCarteraParser'
+import { jefeComercial } from '@/config/negocio'
 import { fmtCOPCompact, fmtInt, fmtPct, fmtVar, shortLabel, variation } from '@/lib/format'
 import { flatFormat } from '@/analysis/flatFormat'
 import { valueFormat } from '@/lib/units'
@@ -511,23 +512,57 @@ function comercialReport(sheet: ComercialSheet): string {
   const dias = sheet.meta.diasHabiles ?? 0
   const av = sheet.meta.avance ?? 0
   const debe = (m: number) => (dias ? (m / dias) * av : 0)
-  const asi = [...sheet.asiVamos].sort((a, b) => b.aHoy - a.aHoy)
+  const ratio = (a: number, b: number | null | undefined) => (b ? a / b : null)
+  const fmtD = (v: number | null) => (v == null ? '—' : v.toLocaleString('es-CO', { maximumFractionDigits: 1 }))
+  const debeR = (r: ComercialSheet['asiVamos'][number]) => r.debeLlevar ?? debe(r.metaVentas)
+  const debeCotiR = (r: ComercialSheet['asiVamos'][number]) => r.debeLlevarCoti ?? debe(r.metaCoti)
+  const cumpFact = (r: ComercialSheet['asiVamos'][number]) => r.cumplFact ?? ratio(r.facturado, debeR(r))
+  const asi = [...sheet.asiVamos].sort((a, b) => (cumpFact(b) ?? -1) - (cumpFact(a) ?? -1))
   const tMeta = asi.reduce((a, r) => a + r.metaVentas, 0)
   const tHoy = asi.reduce((a, r) => a + r.aHoy, 0)
+  const tFact = asi.reduce((a, r) => a + r.facturado, 0)
+  const tDebe = asi.reduce((a, r) => a + debeR(r), 0)
   const tCoti = asi.reduce((a, r) => a + r.aHoyCoti, 0)
   const tMetaCoti = asi.reduce((a, r) => a + r.metaCoti, 0)
   const asiHtml = [
     kpis([
-      { label: 'Radicadas a hoy', value: fmtInt(tHoy), detail: `Meta ${fmtInt(tMeta)}, debe llevar ${fmtInt(Math.round(debe(tMeta)))}`, tone: 'blue' },
-      { label: '% cumplimiento radicadas', value: fmtPct(debe(tMeta) ? tHoy / debe(tMeta) : 0), tone: 'green' },
+      { label: 'Facturado a hoy', value: fmtInt(tFact), detail: `Meta ${fmtInt(tMeta)}, debe llevar ${fmtInt(Math.round(tDebe))}`, tone: 'blue' },
+      { label: '% cumplimiento fact.', value: fmtPct(ratio(tFact, tDebe)), detail: `${fmtInt(tHoy)} radicadas a hoy`, tone: 'green' },
       { label: 'Cotizaciones a hoy', value: fmtInt(tCoti), detail: `${fmtPct(debe(tMetaCoti) ? tCoti / debe(tMetaCoti) : 0)} del debe llevar`, tone: 'amber' },
       { label: '% efectividad', value: fmtPct(tCoti ? tHoy / tCoti : 0), detail: 'Radicadas ÷ cotizaciones', tone: 'coral' },
     ]),
     table(
-      ['Asesor', 'Marca', 'Sede', 'Meta', 'Debe llevar', 'A hoy', '% cump.', 'Cotiz.', '% efect.', 'Data activa', 'Seg. pend.'],
-      asi.map((r) => [r.asesor, r.marca, r.sede, fmtInt(r.metaVentas), debe(r.metaVentas).toFixed(1).replace('.', ','), fmtInt(r.aHoy), fmtPct(debe(r.metaVentas) ? r.aHoy / debe(r.metaVentas) : 0), fmtInt(r.aHoyCoti), r.aHoyCoti ? fmtPct(r.aHoy / r.aHoyCoti) : '—', fmtInt(r.dataActiva), fmtInt(r.segPendiente)]),
-      'Así vamos por asesor',
-      `Debe llevar = meta ÷ ${dias} días hábiles × día de avance ${av}.`,
+      ['#', 'Asesor', 'Jefe comercial', 'Meta', 'Debe llevar', 'Fact. a hoy', '% cump.', 'Rad. a hoy', 'Vitrina', 'Pauta', 'Orgánico', 'Volante', 'Otro', '% cump. rads', 'Meta coti.', 'Debe llevar', 'Cotiz. a hoy', '% cump. coti', 'Alta', 'Media', 'Baja', 'Data activa', '% efect. fact.', 'Seg. pend.', 'Seg. real.', 'Neg. creados'],
+      asi.map((r, i) => [
+        i + 1,
+        r.asesor,
+        jefeComercial(r.sede, r.marca) || r.jefeHoja || '—',
+        fmtInt(r.metaVentas),
+        fmtD(r.debeLlevar ?? (dias ? debe(r.metaVentas) : null)),
+        fmtInt(r.facturado),
+        fmtPct(cumpFact(r)),
+        fmtInt(r.aHoy),
+        fmtInt(r.canales.vitrina),
+        fmtInt(r.canales.pauta),
+        fmtInt(r.canales.organico),
+        fmtInt(r.canales.volante),
+        fmtInt(r.canales.otro),
+        fmtPct(r.cumplRads ?? ratio(r.aHoy, debeR(r))),
+        fmtInt(r.metaCoti),
+        fmtD(r.debeLlevarCoti ?? (dias ? debe(r.metaCoti) : null)),
+        fmtInt(r.aHoyCoti),
+        fmtPct(r.cumplCoti ?? ratio(r.aHoyCoti, debeCotiR(r))),
+        fmtInt(r.alta),
+        fmtInt(r.media),
+        fmtInt(r.baja),
+        fmtInt(r.dataActiva),
+        fmtPct(r.efectividadFact ?? r.efectividad ?? ratio(r.aHoy, r.aHoyCoti)),
+        fmtInt(r.segPendiente),
+        fmtInt(r.segRealizado),
+        fmtInt(r.negCreados),
+      ]),
+      'Importancia — Así vamos por asesor',
+      `Ordenado por % de cumplimiento de facturación (facturado ÷ debe llevar). "Debe llevar" y "% cumplimiento" vienen de la hoja ASI VAMOS; si el bloque no los trae se calculan con ${dias} días hábiles × día ${av}.`,
     ),
   ].join('')
   if (!sheet.hasCrm) return asiHtml

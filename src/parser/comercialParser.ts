@@ -116,8 +116,20 @@ export function parseComercialWorkbook(raws: RawSheet[], ctx: { docIndex: number
     if (a === 'dias habiles' && meta.diasHabiles === null) meta.diasHabiles = N(row[1]) || null
     if (a === 'avance' && meta.avance === null) meta.avance = N(row[1]) || null
     for (let c = 0; c < row.length - 1; c++) {
-      const v = row[c + 1]
-      if (norm(S(row[c])) === 'hoy' && isExcelDate(v) && !meta.hoy) meta.hoy = `${v.y}-${String(v.m).padStart(2, '0')}-${String(v.d).padStart(2, '0')}`
+      if (norm(S(row[c])) !== 'hoy' || meta.hoy) continue
+      // El valor puede venir varias celdas a la derecha (etiqueta y serial separados)
+      for (let k = c + 1; k < Math.min(c + 8, row.length); k++) {
+        const v = row[k]
+        if (isExcelDate(v)) {
+          meta.hoy = `${v.y}-${String(v.m).padStart(2, '0')}-${String(v.d).padStart(2, '0')}`
+          break
+        }
+        if (typeof v === 'number' && v > 40000 && v < 60000) {
+          const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000)
+          meta.hoy = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+          break
+        }
+      }
     }
   }
 
@@ -210,7 +222,56 @@ export function parseComercialWorkbook(raws: RawSheet[], ctx: { docIndex: number
   interface AsiBlock {
     title: string
     bHeader: string
+    /** Posición de cada columna resuelta por nombre de encabezado (-1 si no existe) */
+    col: Record<string, number>
     rows: { r: Cell[] }[]
+  }
+  /** Posiciones de las columnas del bloque por nombre (tolerante a columnas extra como
+   *  FACTURADO HOY, DIF. META VS A HOY o % CUMP que no traía la primera versión). */
+  const blockCols = (names: string[]): Record<string, number> => {
+    const at = (re: RegExp, from = 0) => {
+      for (let i = from; i < names.length; i++) if (re.test(names[i]!)) return i
+      return -1
+    }
+    const meta = at(/^meta ventas/)
+    const facturado = at(/facturad/, meta + 1)
+    const debeLlevar = at(/debe llevar/, meta + 1)
+    const aHoy = at(/^a ?hoy$/, Math.max(facturado, debeLlevar, meta))
+    const vit1 = at(/^vitrina/, Math.max(aHoy, 0))
+    const pau1 = at(/^pauta/, vit1 + 1)
+    const org1 = at(/^org/, pau1 + 1)
+    const vol1 = at(/^volante/, org1 + 1)
+    const otr1 = at(/^otro/, vol1 + 1)
+    const metaCoti = at(/meta coti/, otr1 > 0 ? otr1 : meta + 1)
+    const debeCoti = at(/debe llevar/, metaCoti + 1)
+    const aHoyCoti = at(/^a ?hoy$/, Math.max(debeCoti, metaCoti))
+    const vit2 = at(/^vitrina/, aHoyCoti + 1)
+    const pau2 = at(/^pauta/, vit2 + 1)
+    const org2 = at(/^org/, pau2 + 1)
+    const vol2 = at(/^volante/, org2 + 1)
+    const otr2 = at(/^otro/, vol2 + 1)
+    const tot = at(/^total/, Math.max(otr2, metaCoti) + 1)
+    const alta = at(/^alta/, tot + 1)
+    const media = at(/^media/, alta + 1)
+    const baja = at(/^baja/, media + 1)
+    return {
+      meta,
+      facturado,
+      debeLlevar,
+      cumplFact: at(/cump.*fact/),
+      aHoy,
+      cumplRads: at(/cump.*rads?/),
+      vit1, pau1, org1, vol1, otr1,
+      metaCoti, debeCoti, aHoyCoti,
+      cumplCoti: at(/cump.*coti/, metaCoti + 1),
+      vit2, pau2, org2, vol2, otr2,
+      tot, alta, media, baja,
+      efect: at(/efectividad$/, baja + 1),
+      efectFact: at(/efectividad factu/, baja + 1),
+      segP: at(/seguimiento pend/, baja + 1),
+      segR: at(/seguimiento real/, baja + 1),
+      neg: at(/neg.*creados/, baja + 1),
+    }
   }
   let block: AsiBlock | null = null
   const blocks: (AsiBlock & { section: number })[] = []
@@ -218,14 +279,16 @@ export function parseComercialWorkbook(raws: RawSheet[], ctx: { docIndex: number
   const grandTotals: { section: number; meta: number; aHoy: number }[] = []
   for (const row of asi.rows) {
     const a = S(row[0])
-    const c2 = norm(S(row[2]))
-    if (c2 === 'radicadas') {
+    const names = row.map((c) => norm(S(c)))
+    // Fila de sección sobre el encabezado ("SUMOTO CALI", "SUZUKI PALMIRA"…): trae los
+    // títulos de grupo RADICADAS / COTIZACIONES / DATA ACTIVA sin ser fila de datos.
+    if (names.includes('radicadas') && names.includes('cotizaciones') && !names.includes('meta ventas')) {
       pendingTitle = a || null
       continue
     }
-    if (c2 === 'meta ventas') {
+    if (names.includes('meta ventas')) {
       const t = pendingTitle ?? (norm(a) !== 'asesor' ? a : '')
-      const nb = { title: t, bHeader: norm(S(row[1])), rows: [], section }
+      const nb = { title: t, bHeader: norm(S(row[1])), col: blockCols(names), rows: [], section }
       blocks.push(nb)
       block = nb
       pendingTitle = null
@@ -237,12 +300,14 @@ export function parseComercialWorkbook(raws: RawSheet[], ctx: { docIndex: number
       continue
     }
     // Fila "TOTAL GENERAL" (o "TOTAL GENRAL") de cada sección: se guarda para el control
-    if (/^total gen/.test(norm(a)) && typeof row[4] === 'number') {
-      grandTotals.push({ section, meta: N(row[2]), aHoy: N(row[4]) })
+    const totalCol = block ? (block.col.facturado >= 0 ? block.col.facturado : block.col.aHoy) : -1
+    if (/^total gen/.test(norm(a)) && block && totalCol >= 0 && typeof row[totalCol] === 'number') {
+      grandTotals.push({ section, meta: N(row[block.col.meta]), aHoy: N(row[totalCol]) })
       continue
     }
     if (!block || !a || /^(total|gran total|subtotal)\b/i.test(norm(a))) continue
-    if (typeof row[2] !== 'number' && !/^\d/.test(S(row[2]))) continue
+    const metaCell = row[block.col.meta]
+    if (typeof metaCell !== 'number' && !/^\d/.test(S(metaCell))) continue
     block.rows.push({ r: row })
   }
   const usedConfig: string[] = []
@@ -273,32 +338,44 @@ export function parseComercialWorkbook(raws: RawSheet[], ctx: { docIndex: number
         sede = own ? titleCase(own) : brandMain ? titleCase(brandMain) : `${marca} (sin sede)`
       }
       if (marca === SIN) sede = SIN
+      const col = b.col
+      const g = (k: string) => (col[k] != null && col[k] >= 0 ? N(r[col[k]!]) : 0)
+      const gp = (k: string) => (col[k] != null && col[k] >= 0 ? N(r[col[k]!]) : null)
       asiRows.push({
         asesor,
         marca,
         sede,
         bloque: b.title ? titleCase(b.title) : marca,
-        metaVentas: N(r[2]),
-        aHoy: N(r[4]),
-        canales: { vitrina: N(r[5]), pauta: N(r[6]), organico: N(r[7]), volante: N(r[8]), otro: N(r[9]) },
-        metaCoti: N(r[11]),
-        aHoyCoti: N(r[13]),
-        canalesCoti: { vitrina: N(r[14]), pauta: N(r[15]), organico: N(r[16]), volante: N(r[17]), otro: N(r[18]) },
-        dataActiva: N(r[20]),
-        alta: N(r[21]),
-        media: N(r[22]),
-        baja: N(r[23]),
-        segPendiente: N(r[27]),
-        segRealizado: N(r[28]),
-        negCreados: N(r[29]),
+        jefeHoja: bVal,
+        metaVentas: g('meta'),
+        debeLlevar: gp('debeLlevar'),
+        facturado: col.facturado >= 0 ? g('facturado') : g('aHoy'),
+        cumplFact: gp('cumplFact'),
+        aHoy: g('aHoy'),
+        cumplRads: gp('cumplRads'),
+        canales: { vitrina: g('vit1'), pauta: g('pau1'), organico: g('org1'), volante: g('vol1'), otro: g('otr1') },
+        metaCoti: g('metaCoti'),
+        debeLlevarCoti: gp('debeCoti'),
+        aHoyCoti: g('aHoyCoti'),
+        cumplCoti: gp('cumplCoti'),
+        canalesCoti: { vitrina: g('vit2'), pauta: g('pau2'), organico: g('org2'), volante: g('vol2'), otro: g('otr2') },
+        dataActiva: g('tot'),
+        alta: g('alta'),
+        media: g('media'),
+        baja: g('baja'),
+        efectividad: gp('efect'),
+        efectividadFact: gp('efectFact'),
+        segPendiente: g('segP'),
+        segRealizado: g('segR'),
+        negCreados: g('neg'),
       })
     }
   }
   // Control: el TOTAL GENERAL de cada sección vs la suma de sus asesores
   for (const gt of grandTotals) {
-    const rowsSec = blocks.filter((x) => x.section === gt.section).flatMap((x) => x.rows)
-    const meta = rowsSec.reduce((acc, { r }) => acc + N(r[2]), 0)
-    const aHoy = rowsSec.reduce((acc, { r }) => acc + N(r[4]), 0)
+    const rowsSec = blocks.filter((x) => x.section === gt.section).flatMap((b) => b.rows.map(({ r }) => ({ r, col: b.col })))
+    const meta = rowsSec.reduce((a, x) => a + N(x.r[x.col.meta] ?? null), 0)
+    const aHoy = rowsSec.reduce((a, x) => a + (x.col.facturado >= 0 ? N(x.r[x.col.facturado] ?? null) : N(x.r[x.col.aHoy] ?? null)), 0)
     if (Math.abs(meta - gt.meta) > 0.5 || Math.abs(aHoy - gt.aHoy) > 0.5) {
       notes.push(`ASI VAMOS: el TOTAL GENERAL del archivo dice meta ${fmtN(gt.meta)} y ${fmtN(gt.aHoy)} radicadas a hoy, pero sus asesores suman meta ${fmtN(meta)} y ${fmtN(aHoy)} radicadas. El tablero usa la suma de los asesores.`)
     }

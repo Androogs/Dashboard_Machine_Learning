@@ -12,13 +12,13 @@
  * tal cual y no los afectan los filtros.
  */
 import { useMemo, useState } from 'react'
-import type { GCBloque, GCRow, GCSec, GCTopDoc, GerenciaCarteraSheet } from '@/types/report'
+import type { GCBloque, GCRow, GCSec, GCSegTop, GCTopDoc, GerenciaCarteraSheet } from '@/types/report'
 import { FilterField } from '../blocks'
 import { EnvCard, EnvTable, KpiRow, KpiStripe, PillNav, ReportBand, Row2, TrendBar, VarPill, varOf, type EnvTableCol } from '../env/EnvBlocks'
 import { BarPair, DonutLegend, VarBars } from '../env/EnvCharts'
 import { fmtCOP, fmtCOPCompact, fmtInt, fmtPct, shortLabel, titleCase, variation } from '@/lib/format'
-import { gcClaseDoc, gcFinanciera } from '@/parser/gerenciaCarteraParser'
-import { PALETA_TIENDAS } from '@/config/negocio'
+import { gcClaseDoc, gcCodigo, gcFinanciera, gcSegmento } from '@/parser/gerenciaCarteraParser'
+import { PALETA_TIENDAS, SEGMENTOS_CARTERA, SEG_SIN_ASIGNAR, SUGERENCIA_SEGMENTO } from '@/config/negocio'
 
 const money = fmtCOPCompact
 const moroso = (r: GCRow) => r.b.reduce((a, x) => a + x, 0)
@@ -119,6 +119,7 @@ export function GerenciaCarteraReport({ sheet }: { sheet: GerenciaCarteraSheet }
     { id: 'resumen', label: 'Resumen' },
     { id: 'analizada', label: 'Cartera analizada' },
     { id: 'financieras', label: 'Financieras' },
+    { id: 'segmentos', label: 'Segmentos' },
     { id: 'comparativos', label: 'Comparativos' },
     { id: 'detalle', label: 'Detalle' },
   ]
@@ -143,6 +144,7 @@ export function GerenciaCarteraReport({ sheet }: { sheet: GerenciaCarteraSheet }
       {view === 'resumen' && <ResumenView rows={rows} />}
       {view === 'analizada' && <AnalizadaView rows={rows.filter((r) => r.sec === 'analizada')} />}
       {view === 'financieras' && <FinancierasView rows={rows} />}
+      {view === 'segmentos' && <SegmentosView rows={rows} segTops={sheet.segTops} cob={cob} tc={tc} bod={bod} />}
       {view === 'comparativos' && <ComparativosView sheet={sheet} />}
       {view === 'detalle' && <DetalleView rows={rows} topDocs={sheet.topDocs} />}
 
@@ -360,6 +362,177 @@ function FinancierasView({ rows }: { rows: GCRow[] }) {
         footer={['Total', fmtInt(rows.reduce((a, r) => a + r.n, 0)), fmtCOP(saldo), fmtCOP(rows.reduce((a, r) => a + r.sv, 0)), fmtCOP(morosoTotal), saldo ? fmtPct(morosoTotal / saldo) : '—', '100 %']}
       />
     </>
+  )
+}
+
+/* ================================================================== */
+/* Vista: Segmentos (saldo moroso por responsable: Ana / Contabilidad /  */
+/* Cajeras, según el código del Tipo 2 — SEGMENTOS_CARTERA en negocio)  */
+/* ================================================================== */
+
+/** Agregado por tipo de documento dentro de un segmento. */
+interface SegTipoRow {
+  t2: string
+  n: number
+  mor: number
+  b: number[]
+}
+
+const t2Code = (t2: string) => gcCodigo(t2).toUpperCase() || t2.slice(0, 12)
+
+function SegmentosView({ rows, segTops, cob, tc, bod }: { rows: GCRow[]; segTops: GCSegTop[]; cob: string; tc: string; bod: string }) {
+  // Los segmentos dividen la cartera ANALIZADA (desembolsos, contados y
+  // contabilidad son otras secciones del informe; recibos/notas van aparte).
+  const analizada = useMemo(() => rows.filter((r) => r.sec === 'analizada'), [rows])
+
+  const porSeg = useMemo(() => {
+    const m = new Map<string, GAgg>()
+    for (const s of SEGMENTOS_CARTERA) m.set(s.id, newAgg(s.nombre))
+    m.set(SEG_SIN_ASIGNAR.id, newAgg(SEG_SIN_ASIGNAR.nombre))
+    for (const r of analizada) addTo(m.get(gcSegmento(r.t2))!, r)
+    return m
+  }, [analizada])
+
+  const porTipo = useMemo(() => {
+    const m = new Map<string, SegTipoRow>()
+    for (const r of analizada) {
+      const cur = m.get(r.t2) ?? { t2: r.t2, n: 0, mor: 0, b: [0, 0, 0, 0, 0, 0, 0] }
+      cur.n += r.n
+      for (let i = 0; i < 7; i++) {
+        cur.b[i]! += r.b[i]!
+        cur.mor += r.b[i]!
+      }
+      m.set(r.t2, cur)
+    }
+    return [...m.values()].sort((a, b) => b.mor - a.mor)
+  }, [analizada])
+
+  const morTotal = analizada.reduce((a, r) => a + moroso(r), 0)
+  const saldo = tot(analizada)
+  const asignado = SEGMENTOS_CARTERA.reduce((a, s) => a + porSeg.get(s.id)!.mor, 0)
+  const sinAsignar = porSeg.get(SEG_SIN_ASIGNAR.id)!
+
+  const segDocs = (segId: string) =>
+    segTops
+      .filter((g) => g.seg === segId && (cob === 'ALL' || g.cob === cob))
+      .flatMap((g) => g.docs)
+      .filter((d) => (tc === 'ALL' || d.tc === tc) && (bod === 'ALL' || d.bod === bod))
+      .sort((a, b) => b.moroso - a.moroso)
+      .slice(0, 8)
+
+  const sinAsignarTipos = porTipo.filter((t) => gcSegmento(t.t2) === 'otros' && t.mor > 0.5)
+  const tiposChart = porTipo.filter((t) => t.mor > 0.5).slice(0, 16)
+
+  if (!analizada.length) return <p className="text-sm text-muted-foreground">No hay cartera analizada con los filtros actuales.</p>
+
+  return (
+    <>
+      <KpiRow>
+        <KpiStripe tone="blue" label="Moroso total" value={money(morTotal)} note={`${fmtPct(saldo ? morTotal / saldo : 0)} del saldo analizado filtrado`} />
+        {SEGMENTOS_CARTERA.map((s) => {
+          const a = porSeg.get(s.id)!
+          return <KpiStripe key={s.id} tone={s.id === 'A' ? 'green' : s.id === 'B' ? 'amber' : 'coral'} label={`${s.id} · ${s.nombre}`} value={money(a.mor)} note={`${fmtPct(morTotal ? a.mor / morTotal : 0)} del moroso · ${fmtInt(a.n)} cuotas`} />
+        })}
+      </KpiRow>
+
+      <div className="rounded-xl border border-[#E8C547]/50 bg-[#FFFBEB] px-4 py-3 text-[12px] leading-relaxed text-[#633C00]">
+        <b>Control de calidad:</b> A + B + C = <b>{fmtCOP(asignado)}</b> ({fmtPct(morTotal ? asignado / morTotal : 0)} del moroso)
+        y quedan <b>{fmtCOP(sinAsignar.mor)}</b> ({fmtPct(morTotal ? sinAsignar.mor / morTotal : 0)}) sin asignar a segmento — ver
+        la tabla al final. La suma cuadra exactamente con el moroso de la cartera analizada del filtro.
+        {cob === 'ALL' && ' Sugerencia: filtra Cobrador = “Aux Cartera 1” y Tipo de cartera = “Corriente” para el informe del grupo 15.'}
+      </div>
+
+      <Row2>
+        <EnvCard title="Participación del moroso por segmento">
+          <DonutLegend
+            labels={[...SEGMENTOS_CARTERA.map((s) => `${s.id} · ${s.nombre}`), SEG_SIN_ASIGNAR.nombre]}
+            values={[...SEGMENTOS_CARTERA.map((s) => porSeg.get(s.id)!.mor), sinAsignar.mor]}
+            colors={[...SEGMENTOS_CARTERA.map((s) => s.color), SEG_SIN_ASIGNAR.color]}
+            format={money}
+          />
+        </EnvCard>
+        <EnvCard title="Moroso por tipo de documento (color = segmento)">
+          <BarPair
+            labels={tiposChart.map((t) => t2Code(t.t2))}
+            fullLabels={tiposChart.map((t) => t.t2)}
+            prev={null}
+            cur={tiposChart.map((t) => t.mor)}
+            prevLabel={null}
+            curLabel="Moroso"
+            color={tiposChart.map((t) => SEGMENTOS_CARTERA.find((s) => s.id === gcSegmento(t.t2))?.color ?? SEG_SIN_ASIGNAR.color)}
+            format={money}
+            horizontal
+            height={Math.max(240, tiposChart.length * 24 + 40)}
+          />
+        </EnvCard>
+      </Row2>
+
+      {SEGMENTOS_CARTERA.map((s) => (
+        <SegmentoSeccion key={s.id} seg={s} agg={porSeg.get(s.id)!} tipos={porTipo.filter((t) => gcSegmento(t.t2) === s.id)} docs={segDocs(s.id)} total={morTotal} />
+      ))}
+
+      <EnvCard title="Sin asignar — tipos de documento fuera de los tres segmentos">
+        <EnvTable
+          rows={sinAsignarTipos}
+          cols={[
+            { key: 't', header: 'Tipo de documento', render: (r: SegTipoRow) => <span className="font-medium text-ink">{titleCase(r.t2)}</span>, width: '34%' },
+            { key: 'n', header: 'Cuotas', align: 'right', muted: true, render: (r: SegTipoRow) => fmtInt(r.n) },
+            { key: 'm', header: 'Moroso', align: 'right', render: (r: SegTipoRow) => <span className="font-semibold">{fmtCOP(r.mor)}</span> },
+            { key: 'p', header: '% del moroso', align: 'right', muted: true, render: (r: SegTipoRow) => fmtPct(morTotal ? r.mor / morTotal : 0) },
+            { key: 's', header: 'Adscripción sugerida', muted: true, render: (r: SegTipoRow) => SUGERENCIA_SEGMENTO[gcCodigo(r.t2)] ?? 'Por definir' },
+          ]}
+          rowKey={(r) => r.t2}
+          foot="Para mover un tipo a un segmento, agrega su código a SEGMENTOS_CARTERA en src/config/negocio.ts."
+        />
+      </EnvCard>
+    </>
+  )
+}
+
+function SegmentoSeccion({ seg, agg, tipos, docs, total }: { seg: (typeof SEGMENTOS_CARTERA)[number]; agg: GAgg; tipos: SegTipoRow[]; docs: GCTopDoc[]; total: number }) {
+  const tipoCols: EnvTableCol<SegTipoRow>[] = [
+    { key: 't', header: 'Tipo de documento', render: (r) => <span className="font-medium text-ink" title={r.t2}>{titleCase(r.t2)}</span>, width: '40%' },
+    { key: 'n', header: 'Cuotas', align: 'right', muted: true, render: (r) => fmtInt(r.n) },
+    { key: 'm', header: 'Moroso', align: 'right', render: (r) => <span className="font-semibold">{fmtCOP(r.mor)}</span> },
+    { key: 'p', header: '% del segmento', align: 'right', muted: true, render: (r) => fmtPct(agg.mor ? r.mor / agg.mor : 0) },
+  ]
+  const docCols: EnvTableCol<GCTopDoc>[] = [
+    { key: 'c', header: 'Cliente', render: (r) => <span className="font-medium text-ink">{titleCase(r.cliente)}</span>, width: '46%' },
+    { key: 't', header: 'Documento', muted: true, render: (r) => t2Code(r.t2) },
+    { key: 'm', header: 'Moroso', align: 'right', render: (r) => <span className="font-semibold">{fmtCOP(r.moroso)}</span> },
+    { key: 'p', header: '% seg.', align: 'right', muted: true, render: (r) => fmtPct(agg.mor ? r.moroso / agg.mor : 0) },
+  ]
+  const t0 = tipos[0]
+  const nota = [
+    t0 ? `${t2Code(t0.t2)} concentra ${fmtPct(agg.mor ? t0.mor / agg.mor : 0)} del segmento` : '',
+    `mora reciente 1–30 días: ${fmtPct(agg.mor ? agg.b[0]! / agg.mor : 0)}`,
+    `mora +360 días: ${fmtPct(agg.mor ? agg.b[6]! / agg.mor : 0)}`,
+    docs.length ? `mayor deudor: ${titleCase(docs[0]!.cliente)} (${fmtCOP(docs[0]!.moroso)})` : '',
+  ].filter(Boolean).join(' · ') + '.'
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-baseline gap-x-2 px-1">
+        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: seg.color }} />
+        <h3 className="text-[14px] font-semibold text-ink">Segmento {seg.id} — {seg.nombre}</h3>
+        <span className="text-[11.5px] text-muted-foreground">Tipos: {seg.detalle}</span>
+        <span className="ml-auto text-[11.5px] tabular text-muted-foreground">
+          {fmtCOP(agg.mor)} · {fmtPct(total ? agg.mor / total : 0)} del moroso · {fmtInt(agg.n)} cuotas
+        </span>
+      </div>
+      <Row2>
+        <EnvTable rows={tipos} cols={tipoCols} rowKey={(r) => r.t2} footer={['Total segmento', fmtInt(agg.n), fmtCOP(agg.mor), '100 %']} />
+        <EnvTable rows={docs} cols={docCols} rowKey={(r) => `${r.nit}-${r.t2}`} foot={docs.length ? undefined : 'Sin deudores morosos en este segmento con los filtros actuales.'} />
+      </Row2>
+      <Row2>
+        <EnvCard title={`Envejecimiento del moroso — ${seg.nombre}`}>
+          <BarPair labels={RANGOS} prev={null} cur={agg.b} prevLabel={null} curLabel="Moroso" color={seg.color} format={money} height={170} />
+        </EnvCard>
+        <EnvCard title="Lectura rápida">
+          <p className="text-[12.5px] leading-relaxed text-muted-foreground">{nota}</p>
+        </EnvCard>
+      </Row2>
+    </section>
   )
 }
 

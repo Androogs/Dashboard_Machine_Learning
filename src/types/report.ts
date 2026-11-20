@@ -259,20 +259,36 @@ export interface ComercialAsiVamosRow {
   marca: string
   sede: string
   bloque: string
+  /** Jefe comercial: sede/grupo de la columna B de la hoja (PRINCIPAL, CALI…) */
+  jefeHoja: string
   /** Radicadas (ventas) */
   metaVentas: number
+  /** "Debe llevar" de la hoja; si no viene, se calcula meta ÷ días × avance */
+  debeLlevar: number | null
+  /** Facturados a hoy (columna FACTURADO); si la hoja no la trae, = aHoy */
+  facturado: number
+  /** % cumplimiento de facturación de la hoja */
+  cumplFact: number | null
   aHoy: number
+  /** % cumplimiento de radicadas de la hoja */
+  cumplRads: number | null
   /** Radicadas por canal, tal como vienen en la hoja */
   canales: { vitrina: number; pauta: number; organico: number; volante: number; otro: number }
   /** Cotizaciones */
   metaCoti: number
+  debeLlevarCoti: number | null
   aHoyCoti: number
+  /** % cumplimiento de cotizaciones de la hoja */
+  cumplCoti: number | null
   canalesCoti: { vitrina: number; pauta: number; organico: number; volante: number; otro: number }
   /** Data activa */
   dataActiva: number
   alta: number
   media: number
   baja: number
+  /** % efectividad (data activa → negocio) y % efectividad de facturación de la hoja */
+  efectividad: number | null
+  efectividadFact: number | null
   segPendiente: number
   segRealizado: number
   negCreados: number
@@ -478,6 +494,19 @@ export interface GCTopDoc {
   moroso: number
 }
 
+/**
+ * Segmento del saldo moroso por responsable (SEGMENTOS_CARTERA en config/negocio):
+ * A financieras (Ana), B contabilidad, C cajeras.
+ */
+export type GCSeg = 'A' | 'B' | 'C'
+
+/** Deudores destacados de un segmento dentro de un cobrador. */
+export interface GCSegTop {
+  cob: string
+  seg: GCSeg
+  docs: GCTopDoc[]
+}
+
 export interface GerenciaCarteraSheet {
   kind: 'gerenciaCartera'
   id: string
@@ -490,6 +519,8 @@ export interface GerenciaCarteraSheet {
   periodo: string
   rows: GCRow[]
   topDocs: GCTopDoc[]
+  /** Top de deudores morosos por cobrador × segmento (vista "Segmentos") */
+  segTops: GCSegTop[]
   /** Bloques del comparativo mensual (ej: sept vs oct) */
   mensual: GCBloque[]
   /** Bloques del comparativo anual (ej: oct año anterior vs oct actual) */

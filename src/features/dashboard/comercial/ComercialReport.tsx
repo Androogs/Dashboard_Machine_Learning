@@ -16,6 +16,7 @@ import { EnvCard, EnvTable, KpiRow, KpiStripe, PillNav, ReportBand, Row2, TrendB
 import { DonutLegend } from '../env/EnvCharts'
 import { HBars } from './ComercialCharts'
 import { AsiVamosView } from './AsiVamosView'
+import { ImportanciaView } from './ImportanciaView'
 
 const C = { azul: '#378ADD', verde: '#1D9E75', ambar: '#BA7517', coral: '#D85A30', claro: '#B5D4F4', violeta: '#7F77DD', gris: '#888780' }
 const ORIGENES = ['Vitrina', 'Pauta', 'Orgánico', 'Volante', 'Otros']
@@ -23,10 +24,11 @@ const ORIGEN_COLOR = [C.azul, C.verde, C.coral, C.ambar, C.violeta]
 const PRIORIDADES = ['Alta', 'Media', 'Baja']
 const PRIORIDAD_COLOR = [C.verde, C.ambar, C.claro]
 
-type Section = 'general' | 'pedidos' | 'creados' | 'activos' | 'seguimiento' | 'rojos' | 'asivamos'
+type Section = 'general' | 'pedidos' | 'creados' | 'activos' | 'seguimiento' | 'rojos' | 'asivamos' | 'importancia'
 /** El reporte principal es la hoja ASI VAMOS; las secciones del CRM son complementarias. */
 const SECTIONS: { id: Section; label: string; crm?: boolean }[] = [
   { id: 'asivamos', label: 'Así vamos' },
+  { id: 'importancia', label: 'Importancia' },
   { id: 'general', label: 'Resumen CRM', crm: true },
   { id: 'pedidos', label: 'Pedidos', crm: true },
   { id: 'creados', label: 'Negocios creados', crm: true },
@@ -117,6 +119,7 @@ export function ComercialReport({ sheet }: { sheet: ComercialSheet }) {
       {section === 'seguimiento' && <Simple list={d.seguimiento} label="Seguimientos" color={C.azul} source="td SEGUIMIENTO" />}
       {section === 'rojos' && <Simple list={d.rojos} label="Registros activa rojos" color={C.coral} source="td ACTIVA ROJOS" extra='El valor "SD" se conserva como categoría del archivo.' />}
       {section === 'asivamos' && <AsiVamosView rows={d.asi} all={sheet.asiVamos} meta={m} color={color} group={group} groups={groups} keyBy={key} />}
+      {section === 'importancia' && <ImportanciaView rows={d.asi} meta={m} color={color} />}
 
       <ul className="space-y-0.5 px-1 text-[10.5px] text-muted-foreground">
         {section !== 'asivamos' && <li>* Conteos recalculados desde las hojas base del CRM (PEDIDO, CREADOS, ACTIVOS, SEGUIMIENTO, ACTIVA ROJOS) con la marca y la sede de la columna VITRINA / PUNTO DE VENTA.</li>}

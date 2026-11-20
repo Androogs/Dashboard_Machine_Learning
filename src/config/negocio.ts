@@ -133,3 +133,59 @@ export const MARCA_POR_ASESOR: Record<string, string> = {
   JENNY: 'Honda',
   VICTORIA: 'Honda',
 }
+
+/**
+ * Jefe comercial por sede/marca del tablero Así vamos (dato del usuario):
+ *   Katherine Cuevas Morales → Suzuki (Palmira Principal, Centro, Florida, Candelaria, Pradera)
+ *   Diana Mercedes           → Suzuki Cali
+ *   Felipe Benítez           → Honda, Auteco y Bajaj
+ *   Miller Solarte           → AKT
+ * Se evalúan en orden; gana la primera regla que cumpla. Ajusta aquí si cambian.
+ */
+export const JEFES_COMERCIALES: { jefe: string; sede?: RegExp; marca?: RegExp }[] = [
+  { jefe: 'Miller Solarte', marca: /^akt$/i },
+  { jefe: 'Felipe Benítez', marca: /^(honda|auteco|bajaj)$/i },
+  { jefe: 'Diana Mercedes', sede: /\bcali\b/i },
+  { jefe: 'Katherine Cuevas Morales', marca: /^suzuki$/i },
+]
+
+/** Nombre del jefe comercial para una sede/marca; '' si no está mapeado. */
+export function jefeComercial(sede: string, marca: string): string {
+  for (const r of JEFES_COMERCIALES) {
+    if (r.sede && r.sede.test(sede)) return r.jefe
+    if (r.marca && r.marca.test(marca)) return r.jefe
+  }
+  return ''
+}
+
+/* ---------------- Segmentos de la cartera auxiliar (informe de gerencia) ---------------- */
+
+/**
+ * Segmentación del saldo MOROSO por responsable, según el código del "Tipo 2"
+ * de documento (regla dada por la jefatura de cartera para el cobrador 001,
+ * grupo 15 – Auxiliar de cartera; aplica a cualquier cobrador filtrado):
+ *   A — Auxiliar de cartera Ana (financieras): FG, FJ, FOG, FP, FPA, FR, FB
+ *   B — Contabilidad:                          FORA, FORAS, FI, FPI
+ *   C — Cajeras:                               RP* (RPE1…RPE22, RPEN) y SE* (SEE…)
+ * El código se toma del primer token del "Tipo 2" ("RPE10 - …" → rpe10).
+ * Lo que no cae en ninguna lista queda "Sin asignar" (hoy: FP1, FORAZ, FV);
+ * para adscribirlo, agrega su código al segmento correspondiente.
+ */
+export const SEGMENTOS_CARTERA: { id: 'A' | 'B' | 'C'; nombre: string; detalle: string; color: string; match: RegExp }[] = [
+  { id: 'A', nombre: 'Financieras (Ana)', detalle: 'FG, FJ, FOG, FP, FPA, FR, FB', color: '#378ADD', match: /^(fg|fj|fog|fp|fpa|fr|fb)\b/ },
+  { id: 'B', nombre: 'Contabilidad', detalle: 'FORA, FORAS, FI, FPI', color: '#BA7517', match: /^(fora|foras|fi|fpi)\b/ },
+  { id: 'C', nombre: 'Cajeras', detalle: 'RP* (RPE…, RPEN) y SE* (SEE…)', color: '#1D9E75', match: /^(rp|se)/ },
+]
+
+/** Grupo para los tipos de documento que no caen en ningún segmento. */
+export const SEG_SIN_ASIGNAR = { id: 'otros', nombre: 'Sin asignar', color: '#888780' }
+
+/**
+ * Adscripción sugerida de los tipos "Sin asignar" (se muestra solo como nota;
+ * si la jefatura la aprueba, muévelos a SEGMENTOS_CARTERA).
+ */
+export const SUGERENCIA_SEGMENTO: Record<string, string> = {
+  fp1: 'Contabilidad (B)',
+  foraz: 'Contabilidad (B)',
+  fv: 'Financieras (A)',
+}
